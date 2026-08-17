@@ -229,20 +229,25 @@ export default function HabitsPage() {
                       {last7Days.map((dayStr) => {
                         const isCompleted = habitLogs.some(log => log.completed_at === dayStr);
                         const isToday = dayStr === todayStr;
+                        const isBeforeHabit = dayStr < format(new Date(habit.created_at), 'yyyy-MM-dd');
                         return (
-                          <div 
+                          <button
+                            type="button"
                             key={dayStr}
-                            title={dayStr}
-                            className={`flex h-8 w-8 items-center justify-center rounded-lg border text-xs font-bold transition-all ${
+                            disabled={isBeforeHabit}
+                            onClick={(event) => { event.stopPropagation(); void toggleHabitCheckIn(habit.id, dayStr); }}
+                            title={`${format(new Date(dayStr), 'MMM d, yyyy')} · ${isCompleted ? 'Click to undo' : 'Click to check in'}`}
+                            aria-label={`${isCompleted ? 'Remove' : 'Add'} ${habit.name} check-in for ${format(new Date(dayStr), 'MMMM d, yyyy')}`}
+                            className={`flex h-8 w-8 items-center justify-center rounded-lg border text-xs font-bold transition-all disabled:cursor-not-allowed disabled:opacity-30 ${
                               isCompleted 
                                 ? 'border-transparent bg-[var(--color-success)]/20 text-[var(--color-success)]' 
                                 : isToday
                                   ? 'border-[var(--color-primary)] bg-transparent text-[var(--color-primary)]'
-                                  : 'border-transparent bg-zinc-900 text-zinc-600'
+                                  : 'border-transparent bg-zinc-900 text-zinc-600 hover:border-[var(--color-success)] hover:text-[var(--color-success)]'
                             }`}
                           >
                             {isCompleted ? <Check size={14} /> : format(new Date(dayStr), 'd')}
-                          </div>
+                          </button>
                         );
                       })}
                     </div>
@@ -265,7 +270,11 @@ export default function HabitsPage() {
                 {/* Expanded Detailed View */}
                 {isExpanded && (
                   <div className="border-t border-[var(--surface-border)] bg-zinc-900/30 p-6 animate-in slide-in-from-top-2" onClick={(e) => e.stopPropagation()}>
-                    <HabitDetails habit={habit} logs={habitLogs} />
+                    <HabitDetails
+                      habit={habit}
+                      logs={habitLogs}
+                      onToggle={(dayStr) => toggleHabitCheckIn(habit.id, dayStr)}
+                    />
                   </div>
                 )}
               </div>
@@ -386,7 +395,7 @@ export default function HabitsPage() {
 
 
 // --- HabitDetails Subcomponent ---
-function HabitDetails({ habit, logs }: { habit: Habit, logs: HabitLog[] }) {
+function HabitDetails({ habit, logs, onToggle }: { habit: Habit; logs: HabitLog[]; onToggle: (dayStr: string) => Promise<boolean> }) {
   const [viewMode, setViewMode] = useState<'week' | 'month' | 'year'>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
 
@@ -484,6 +493,7 @@ function HabitDetails({ habit, logs }: { habit: Habit, logs: HabitLog[] }) {
             <CalendarDays size={16} />
             <span>Activity Heatmap</span>
           </h4>
+          <p className="text-xs text-zinc-500">Click any eligible day to add or undo a check-in.</p>
           
           <div className="flex items-center space-x-2 bg-zinc-900 rounded-xl p-1 border border-[var(--surface-border)]">
             {(['week', 'month', 'year'] as const).map(mode => (
@@ -517,33 +527,45 @@ function HabitDetails({ habit, logs }: { habit: Habit, logs: HabitLog[] }) {
               const dayStr = format(day, 'yyyy-MM-dd');
               const isCompleted = logSet.has(dayStr);
               const isCurrentMonth = viewMode === 'month' ? day.getMonth() === currentDate.getMonth() : true;
+              const isEligible = dayStr <= format(new Date(), 'yyyy-MM-dd')
+                && dayStr >= format(new Date(habit.created_at), 'yyyy-MM-dd');
               
               if (viewMode === 'year') {
                 return (
-                  <div 
+                  <button
+                    type="button"
                     key={dayStr}
-                    title={`${format(day, 'MMM d, yyyy')}${isCompleted ? ' - Completed' : ''}`}
-                    className={`h-3 w-3 sm:h-4 sm:w-4 rounded-[2px] transition-colors ${
+                    disabled={!isEligible}
+                    onClick={() => void onToggle(dayStr)}
+                    title={`${format(day, 'MMM d, yyyy')}${isCompleted ? ' · Click to undo' : isEligible ? ' · Click to check in' : ''}`}
+                    aria-label={`${isCompleted ? 'Remove' : 'Add'} ${habit.name} check-in for ${format(day, 'MMMM d, yyyy')}`}
+                    className={`h-3 w-3 sm:h-4 sm:w-4 rounded-[2px] transition-colors disabled:cursor-not-allowed disabled:opacity-30 ${
                       isCompleted ? 'bg-[var(--color-success)]' : 'bg-zinc-800'
-                    }`}
+                    } ${isEligible ? 'hover:ring-2 hover:ring-[var(--color-success)]/60' : ''}`}
                   />
                 );
               }
 
               return (
-                <div 
+                <button
+                  type="button"
                   key={dayStr}
-                  title={`${format(day, 'MMM d, yyyy')}${isCompleted ? ' - Completed' : ''}`}
-                  className={`aspect-square flex items-center justify-center rounded-lg text-xs font-bold transition-all ${
+                  disabled={!isEligible}
+                  onClick={() => void onToggle(dayStr)}
+                  title={`${format(day, 'MMM d, yyyy')}${isCompleted ? ' · Click to undo' : isEligible ? ' · Click to check in' : ''}`}
+                  aria-label={`${isCompleted ? 'Remove' : 'Add'} ${habit.name} check-in for ${format(day, 'MMMM d, yyyy')}`}
+                  className={`aspect-square flex items-center justify-center rounded-lg text-xs font-bold transition-all disabled:cursor-not-allowed ${
                     !isCurrentMonth ? 'opacity-20' : ''
                   } ${
                     isCompleted 
-                      ? 'bg-[var(--color-success)]/20 text-[var(--color-success)] border border-[var(--color-success)]/30' 
-                      : 'bg-zinc-900 border border-[var(--surface-border)] text-zinc-600'
+                      ? 'bg-[var(--color-success)]/20 text-[var(--color-success)] border border-[var(--color-success)]/30 hover:bg-red-500/10 hover:text-red-300'
+                      : isEligible
+                        ? 'bg-zinc-900 border border-[var(--surface-border)] text-zinc-600 hover:border-[var(--color-success)] hover:text-[var(--color-success)]'
+                        : 'bg-zinc-900 border border-[var(--surface-border)] text-zinc-700 opacity-30'
                   }`}
                 >
                   {format(day, 'd')}
-                </div>
+                </button>
               );
             })}
           </div>

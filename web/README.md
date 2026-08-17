@@ -53,15 +53,16 @@ fallback. Never expose a Supabase secret or `service_role` key in a
 For a new Supabase project, apply:
 
 ```text
-supabase/schema.sql
+../supabase/schema.sql
 ```
 
 For an existing OneStep database that already has the original schema and
 `update_schema.sql`, apply:
 
 ```text
-supabase/phase_8_14_improvements.sql
-supabase/gamification_system.sql
+../supabase/phase_8_14_improvements.sql
+../supabase/gamification_system.sql
+../supabase/manual_focus_project_assignment.sql
 ```
 
 The migration adds:
@@ -74,6 +75,7 @@ The migration adds:
 - Habit display ordering
 - Data validation, uniqueness, indexes, and stronger RLS policies
 - Server-calculated XP, levels, achievement inputs, and protected score fields
+- Direct project assignment for taskless manual focus sessions
 
 Apply the migration before running the updated UI because the client expects the
 new columns.
@@ -95,7 +97,7 @@ npm run build
 | `/` | Daily dashboard |
 | `/projects` | Project management and project focus heatmap |
 | `/tasks` | Task CRUD, deadline performance, and time comparisons |
-| `/pomodoro` | Task-linked timer, manual focus entry, alarm, notifications, and history |
-| `/habits` | Ordered habit cards, current/backdated check-ins, and habit detail |
+| `/pomodoro` | Task/project-linked timer, manual focus entry, alarm, notifications, and history |
+| `/habits` | Ordered habit cards, clickable calendar check-ins, and habit detail |
 | `/analytics` | Weekly-by-default presets, custom/all-time ranges, and four analytics sections |
 | `/settings` | Profile, timer defaults, and notifications |

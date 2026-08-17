@@ -3,22 +3,31 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
-import { Target, Lock, Mail, User } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, Lock, Mail, Target, User } from "lucide-react";
 
 export default function LoginPage() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   
   const router = useRouter();
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isLogin && password !== confirmPassword) {
+      setError("Passwords do not match. Please enter them again.");
+      return;
+    }
     setLoading(true);
     setError(null);
+    setSuccess(null);
 
     try {
       if (isLogin) {
@@ -39,15 +48,29 @@ export default function LoginPage() {
           }
         });
         if (error) throw error;
-        // User created, maybe require email confirmation depending on Supabase settings
-        alert("Registration successful! You can now log in.");
+        await supabase.auth.signOut();
+        const confirmationMessage = `Account created. We sent a confirmation link to ${email}. Confirm your email address, then log in.`;
+        setSuccess(confirmationMessage);
         setIsLogin(true);
+        setPassword("");
+        setConfirmPassword("");
+        router.replace("/login");
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "An error occurred during authentication.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const switchMode = (loginMode: boolean) => {
+    setIsLogin(loginMode);
+    setError(null);
+    setSuccess(null);
+    setPassword("");
+    setConfirmPassword("");
+    setShowPassword(false);
+    setShowConfirmPassword(false);
   };
 
   return (
@@ -64,7 +87,8 @@ export default function LoginPage() {
         <div className="rounded-3xl border border-[var(--surface-border)] bg-[var(--surface)]/50 p-8 shadow-2xl backdrop-blur-xl">
           <div className="mb-8 flex rounded-xl bg-zinc-900/50 p-1">
             <button
-              onClick={() => setIsLogin(true)}
+              type="button"
+              onClick={() => switchMode(true)}
               className={`w-1/2 rounded-lg py-2.5 text-sm font-semibold transition-all ${
                 isLogin ? "bg-[var(--surface-border)] text-white shadow-sm" : "text-zinc-400 hover:text-white"
               }`}
@@ -72,7 +96,8 @@ export default function LoginPage() {
               Login
             </button>
             <button
-              onClick={() => setIsLogin(false)}
+              type="button"
+              onClick={() => switchMode(false)}
               className={`w-1/2 rounded-lg py-2.5 text-sm font-semibold transition-all ${
                 !isLogin ? "bg-[var(--surface-border)] text-white shadow-sm" : "text-zinc-400 hover:text-white"
               }`}
@@ -125,15 +150,59 @@ export default function LoginPage() {
                   <Lock size={18} />
                 </div>
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full rounded-xl border border-[var(--surface-border)] bg-zinc-900/50 py-3 pl-10 pr-4 text-white placeholder-zinc-500 transition-colors focus:border-[var(--color-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
+                  className="w-full rounded-xl border border-[var(--surface-border)] bg-zinc-900/50 py-3 pl-10 pr-12 text-white placeholder-zinc-500 transition-colors focus:border-[var(--color-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
                   placeholder="••••••••"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((visible) => !visible)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  className="absolute inset-y-0 right-0 flex items-center px-3 text-zinc-500 hover:text-white"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
             </div>
+
+            {!isLogin && (
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-zinc-400">Confirm Password</label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-500">
+                    <Lock size={18} />
+                  </div>
+                  <input
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                    className="w-full rounded-xl border border-[var(--surface-border)] bg-zinc-900/50 py-3 pl-10 pr-12 text-white placeholder-zinc-500 transition-colors focus:border-[var(--color-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
+                    placeholder="Re-enter your password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword((visible) => !visible)}
+                    aria-label={showConfirmPassword ? "Hide confirmed password" : "Show confirmed password"}
+                    aria-pressed={showConfirmPassword}
+                    className="absolute inset-y-0 right-0 flex items-center px-3 text-zinc-500 hover:text-white"
+                  >
+                    {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {success && (
+              <div role="status" className="flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-200">
+                <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
+                <span>{success}</span>
+              </div>
+            )}
 
             {error && (
               <div className="rounded-lg bg-[var(--color-danger)]/10 p-3 text-sm text-[var(--color-danger)]">

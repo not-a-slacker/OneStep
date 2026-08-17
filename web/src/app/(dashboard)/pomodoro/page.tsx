@@ -53,7 +53,9 @@ export default function PomodoroPage() {
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isManualEntryOpen, setIsManualEntryOpen] = useState(false)
+  const [manualAssignmentType, setManualAssignmentType] = useState<"task" | "project">("task")
   const [manualTaskId, setManualTaskId] = useState("")
+  const [manualProjectId, setManualProjectId] = useState("")
   const [manualDuration, setManualDuration] = useState("25")
   const [manualStartedAt, setManualStartedAt] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"))
   const [focusInput, setFocusInput] = useState("25")
@@ -165,7 +167,14 @@ export default function PomodoroPage() {
 
   const openManualEntry = () => {
     clearError()
+    setManualAssignmentType(currentTaskId ? "task" : "project")
     setManualTaskId(currentTaskId ?? "")
+    setManualProjectId(
+      (currentTaskId ? tasks.find((task) => task.id === currentTaskId)?.project_id : null)
+      ?? projects.find((project) => project.is_default)?.id
+      ?? projects.find((project) => project.status === "active")?.id
+      ?? "",
+    )
     setManualDuration("25")
     setManualStartedAt(format(new Date(), "yyyy-MM-dd'T'HH:mm"))
     setIsManualEntryOpen(true)
@@ -174,7 +183,8 @@ export default function PomodoroPage() {
   const saveManualEntry = async (event: React.FormEvent) => {
     event.preventDefault()
     const saved = await addManualSession({
-      taskId: manualTaskId,
+      taskId: manualAssignmentType === "task" ? manualTaskId : null,
+      projectId: manualAssignmentType === "project" ? manualProjectId : null,
       durationMinutes: Number(manualDuration),
       startedAt: manualStartedAt,
     })
@@ -412,21 +422,53 @@ export default function PomodoroPage() {
             </h2>
             <p className="mt-2 text-sm text-zinc-400">Record a focus block you completed away from the timer.</p>
             <form onSubmit={saveManualEntry} className="mt-6 space-y-4">
-              <label className="block">
-                <span className="mb-1 block text-sm font-medium text-zinc-400">Task *</span>
-                <select
-                  required
-                  value={manualTaskId}
-                  onChange={(event) => setManualTaskId(event.target.value)}
-                  className="w-full rounded-xl border border-[var(--surface-border)] bg-zinc-900 px-4 py-2.5 text-white focus:border-[var(--color-primary)] focus:outline-none"
-                >
-                  <option value="">Select a task</option>
-                  {[...tasks].sort((a, b) => a.title.localeCompare(b.title)).map((task) => {
-                    const project = projects.find((item) => item.id === task.project_id)
-                    return <option key={task.id} value={task.id}>{task.title} · {project?.name ?? "Misc."}</option>
-                  })}
-                </select>
-              </label>
+              <fieldset>
+                <legend className="mb-2 text-sm font-medium text-zinc-400">Assign focus time to *</legend>
+                <div className="grid grid-cols-2 rounded-xl bg-zinc-900 p-1">
+                  {([['task', 'Open task'], ['project', 'Project']] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setManualAssignmentType(value)}
+                      className={`rounded-lg px-3 py-2 text-sm font-bold transition-colors ${manualAssignmentType === value ? 'bg-[var(--color-primary)] text-white' : 'text-zinc-400 hover:text-white'}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+              {manualAssignmentType === "task" ? (
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-zinc-400">Open task *</span>
+                  <select
+                    required
+                    value={manualTaskId}
+                    onChange={(event) => setManualTaskId(event.target.value)}
+                    className="w-full rounded-xl border border-[var(--surface-border)] bg-zinc-900 px-4 py-2.5 text-white focus:border-[var(--color-primary)] focus:outline-none"
+                  >
+                    <option value="">Select an open task</option>
+                    {taskOptions.map((task) => {
+                      const project = projects.find((item) => item.id === task.project_id)
+                      return <option key={task.id} value={task.id}>{task.title} · {project?.name ?? "Misc."}</option>
+                    })}
+                  </select>
+                </label>
+              ) : (
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-zinc-400">Project *</span>
+                  <select
+                    required
+                    value={manualProjectId}
+                    onChange={(event) => setManualProjectId(event.target.value)}
+                    className="w-full rounded-xl border border-[var(--surface-border)] bg-zinc-900 px-4 py-2.5 text-white focus:border-[var(--color-primary)] focus:outline-none"
+                  >
+                    <option value="">Select a project</option>
+                    {[...projects]
+                      .sort((a, b) => Number(b.is_default) - Number(a.is_default) || a.name.localeCompare(b.name))
+                      .map((project) => <option key={project.id} value={project.id}>{project.name}{project.status === "completed" ? " · completed" : ""}</option>)}
+                  </select>
+                </label>
+              )}
               <label className="block">
                 <span className="mb-1 block text-sm font-medium text-zinc-400">Started at *</span>
                 <input

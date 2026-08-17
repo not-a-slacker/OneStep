@@ -18,6 +18,7 @@ For an existing OneStep database, run these files in order:
 ```text
 ../supabase/phase_8_14_improvements.sql
 ../supabase/gamification_system.sql
+../supabase/manual_focus_project_assignment.sql
 ```
 
 The gamification migration is required for server-calculated XP and levels. It
@@ -129,6 +130,11 @@ variable, redeploy from the Deployments page.
 After the first Vercel deployment gives you the final production URL, open
 Supabase **Authentication > URL Configuration**.
 
+In **Authentication > Providers > Email**, keep email/password authentication
+enabled and turn on **Confirm email**. The application signs a new user out,
+shows an in-page confirmation notice, and returns them to the login form until
+they confirm the address.
+
 Set **Site URL** to the exact production address, for example:
 
 ```text
@@ -154,7 +160,7 @@ back to localhost.
 
 Create a fresh test account and verify:
 
-1. Sign-up, confirmation email if enabled, sign-in, and sign-out.
+1. Sign-up, required confirmation email, sign-in, and sign-out.
 2. Project and task creation.
 3. Task completion and immediate header XP changes.
 4. Habit check-in, backdated check-in, streak, and XP changes.
@@ -212,4 +218,3 @@ The first command links or creates a Vercel project. Configure the same two
 environment variables in the Vercel dashboard, then run `vercel --prod` again
 so the production build includes them. Git integration is recommended for
 automatic preview and production deployments.
-

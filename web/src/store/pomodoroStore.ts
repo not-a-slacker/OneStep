@@ -18,7 +18,8 @@ export interface PomodoroSession {
 }
 
 export interface ManualFocusSessionInput {
-  taskId: string
+  taskId: string | null
+  projectId: string | null
   durationMinutes: number
   startedAt: string
 }
@@ -141,13 +142,18 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => ({
     })
   },
 
-  addManualSession: async ({ taskId, durationMinutes, startedAt }) => {
+  addManualSession: async ({ taskId, projectId, durationMinutes, startedAt }) => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return false
 
-    const task = useTaskStore.getState().tasks.find((item) => item.id === taskId)
-    if (!task) {
-      set({ error: 'Select a valid task for the manual focus entry.' })
+    const task = taskId
+      ? useTaskStore.getState().tasks.find((item) => item.id === taskId)
+      : null
+    const project = task
+      ? useProjectStore.getState().projects.find((item) => item.id === task.project_id)
+      : useProjectStore.getState().projects.find((item) => item.id === projectId)
+    if ((taskId && !task) || !project) {
+      set({ error: 'Select a valid open task or project for the manual focus entry.' })
       return false
     }
 
@@ -163,8 +169,8 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => ({
       .from('pomodoro_sessions')
       .insert([{
         user_id: user.id,
-        task_id: task.id,
-        project_id: task.project_id,
+        task_id: task?.id ?? null,
+        project_id: project.id,
         duration,
         planned_duration: duration,
         start_time: start.toISOString(),
