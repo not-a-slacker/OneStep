@@ -1,36 +1,101 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# OneStep Web Application
 
-## Getting Started
+OneStep is a Supabase-backed productivity dashboard for projects, tasks,
+task-linked Pomodoro sessions, habits, and analytics.
 
-First, run the development server:
+## Run in WSL
+
+The project is intended to run inside WSL. Keep the repository in the Linux
+filesystem for the best Next.js file-watching and build performance, for
+example:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+~/projects/OneStep
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+If the repository remains on the Windows drive, open it through:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+cd /mnt/c/Users/<windows-user>/path/to/OneStep/web
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Install and run:
 
-## Learn More
+```bash
+npm install
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+Open [http://localhost:3000](http://localhost:3000).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+For production hosting, follow [VERCEL_DEPLOYMENT.md](./VERCEL_DEPLOYMENT.md).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Do not run `npm install` alternately from Windows and WSL against the same
+`node_modules` directory. Native packages such as Next.js SWC are
+platform-specific. Delete `node_modules` and reinstall from WSL if the
+dependencies were last installed from Windows.
 
-## Deploy on Vercel
+## Environment
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Create `web/.env.local`:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your_supabase_publishable_key
+```
+
+The legacy `NEXT_PUBLIC_SUPABASE_ANON_KEY` variable is also supported as a
+fallback. Never expose a Supabase secret or `service_role` key in a
+`NEXT_PUBLIC_` variable.
+
+## Database
+
+For a new Supabase project, apply:
+
+```text
+supabase/schema.sql
+```
+
+For an existing OneStep database that already has the original schema and
+`update_schema.sql`, apply:
+
+```text
+supabase/phase_8_14_improvements.sql
+supabase/gamification_system.sql
+```
+
+The migration adds:
+
+- A protected `Misc.` project for every user
+- Required task-to-project relationships
+- Task completion timestamps
+- Task-linked Pomodoro sessions
+- Planned versus actual session duration fields
+- Habit display ordering
+- Data validation, uniqueness, indexes, and stronger RLS policies
+- Server-calculated XP, levels, achievement inputs, and protected score fields
+
+Apply the migration before running the updated UI because the client expects the
+new columns.
+
+## Quality checks
+
+Run inside WSL:
+
+```bash
+npm run lint
+npm run typecheck
+npm run build
+```
+
+## Main routes
+
+| Route | Purpose |
+|---|---|
+| `/` | Daily dashboard |
+| `/projects` | Project management and project focus heatmap |
+| `/tasks` | Task CRUD, deadline performance, and time comparisons |
+| `/pomodoro` | Task-linked timer, manual focus entry, alarm, notifications, and history |
+| `/habits` | Ordered habit cards, current/backdated check-ins, and habit detail |
+| `/analytics` | Weekly-by-default presets, custom/all-time ranges, and four analytics sections |
+| `/settings` | Profile, timer defaults, and notifications |
