@@ -5,6 +5,7 @@ import { useProjectStore, type Project } from "@/store/projectStore";
 import { useTaskStore, type Task } from "@/store/taskStore";
 import { usePomodoroStore, type PomodoroSession } from "@/store/pomodoroStore";
 import { FolderKanban, Plus, Calendar, CheckCircle2, Clock, Check, Trash2, CalendarDays, ChevronLeft, ChevronRight, AlertCircle } from "lucide-react";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { format, subDays, startOfWeek, endOfWeek, eachDayOfInterval, startOfMonth, endOfMonth, startOfYear, endOfYear, addMonths, subMonths, addYears, subYears } from "date-fns";
 
 export default function ProjectsPage() {
@@ -19,6 +20,8 @@ export default function ProjectsPage() {
 
   const [expandedProjectId, setExpandedProjectId] = useState<string | null>(null);
   const [heatmapProjectId, setHeatmapProjectId] = useState<string>("");
+  const [projectPendingDeletion, setProjectPendingDeletion] = useState<Project | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     void Promise.all([fetchProjects(), fetchTasks(), fetchSessions()])
@@ -48,6 +51,23 @@ export default function ProjectsPage() {
   const activeProjects = projects.filter(p => p.status === 'active');
   const completedProjects = projects.filter(p => p.status === 'completed');
   const resolvedHeatmapProjectId = heatmapProjectId || projects[0]?.id || "";
+
+  // Deleting a project does not delete its work: the database reassigns tasks
+  // and focus sessions to Misc. The user was never told that (ROADMAP B-13).
+  const pendingTaskCount = projectPendingDeletion
+    ? tasks.filter(t => t.project_id === projectPendingDeletion.id).length
+    : 0;
+  const pendingSessionCount = projectPendingDeletion
+    ? sessions.filter(s => s.project_id === projectPendingDeletion.id).length
+    : 0;
+
+  const confirmDeleteProject = async () => {
+    if (!projectPendingDeletion) return;
+    setDeleting(true);
+    const removed = await deleteProject(projectPendingDeletion.id);
+    setDeleting(false);
+    if (removed) setProjectPendingDeletion(null);
+  };
 
   return (
     <div className="mx-auto max-w-5xl space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12">
@@ -153,7 +173,7 @@ export default function ProjectsPage() {
                     key={project.id} 
                     project={project} 
                     updateProject={updateProject} 
-                    deleteProject={deleteProject}
+                    onRequestDelete={setProjectPendingDeletion}
                     tasks={tasks.filter(t => t.project_id === project.id)}
                     sessions={sessions.filter(s => s.project_id === project.id)}
                     isExpanded={expandedProjectId === project.id}
@@ -177,7 +197,7 @@ export default function ProjectsPage() {
                     key={project.id} 
                     project={project} 
                     updateProject={updateProject} 
-                    deleteProject={deleteProject}
+                    onRequestDelete={setProjectPendingDeletion}
                     tasks={tasks.filter(t => t.project_id === project.id)}
                     sessions={sessions.filter(s => s.project_id === project.id)}
                     isExpanded={expandedProjectId === project.id}
@@ -189,6 +209,32 @@ export default function ProjectsPage() {
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={Boolean(projectPendingDeletion)}
+        title="Delete this project?"
+        description={
+          <>
+            <strong className="text-zinc-200">{projectPendingDeletion?.name}</strong> will be
+            deleted.
+            {(pendingTaskCount > 0 || pendingSessionCount > 0) ? (
+              <>
+                {" "}Its {pendingTaskCount} task{pendingTaskCount === 1 ? "" : "s"} and{" "}
+                {pendingSessionCount} focus session{pendingSessionCount === 1 ? "" : "s"} will be
+                moved to <strong className="text-zinc-200">Misc.</strong> rather than deleted,
+                and those sessions will lose their task link.
+              </>
+            ) : (
+              <> It has no tasks or focus sessions.</>
+            )}
+            {" "}This cannot be undone.
+          </>
+        }
+        confirmLabel="Delete project"
+        busy={deleting}
+        onConfirm={() => void confirmDeleteProject()}
+        onCancel={() => setProjectPendingDeletion(null)}
+      />
     </div>
   );
 }
@@ -196,14 +242,14 @@ export default function ProjectsPage() {
 interface ProjectCardProps {
   project: Project;
   updateProject: (id: string, updates: Partial<Project>) => Promise<boolean>;
-  deleteProject: (id: string) => Promise<boolean>;
+  onRequestDelete: (project: Project) => void;
   tasks: Task[];
   sessions: PomodoroSession[];
   isExpanded: boolean;
   onToggle: () => void;
 }
 
-function ProjectCard({ project, updateProject, deleteProject, tasks, sessions, isExpanded, onToggle }: ProjectCardProps) {
+function ProjectCard({ project, updateProject, onRequestDelete, tasks, sessions, isExpanded, onToggle }: ProjectCardProps) {
   const tasksCompleted = tasks.filter((task) => task.status === 'completed').length;
   const timeSpent = sessions.reduce((total, session) => total + session.duration, 0);
 
@@ -246,7 +292,7 @@ function ProjectCard({ project, updateProject, deleteProject, tasks, sessions, i
               {project.status === 'active' ? <Check size={18} /> : <RotateCcwIcon />}
             </button>}
             {!project.is_default && <button 
-              onClick={(e) => { e.stopPropagation(); void deleteProject(project.id); }}
+              onClick={(e) => { e.stopPropagation(); onRequestDelete(project); }}
               className="rounded-lg p-2 text-zinc-500 hover:bg-[var(--color-danger)] hover:text-white"
             >
               <Trash2 size={18} />
