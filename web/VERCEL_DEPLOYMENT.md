@@ -54,32 +54,41 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_your_key
 The older variable `NEXT_PUBLIC_SUPABASE_ANON_KEY` remains supported as a
 fallback.
 
-## 3. Put the web application on GitHub
+## 3. Put the project on GitHub
 
-The current `web` directory is the application and Git repository root. Review
-the files before committing:
+**The repository layout changed.** The Git root is now the `OneStep` directory,
+not `web`. One repository holds the web app, the Android client, the Supabase
+migrations, and the documentation. The original three `web` commits were
+rewritten so their files sit under `web/`, so the history is preserved but the
+commit hashes are new.
+
+Review before committing (the web app is developed inside WSL):
 
 ```bash
-cd /mnt/c/Users/Bhuvee/Documents/IIITH/projects/OneStep/web
+cd /mnt/c/Users/Bhuvee/Documents/IIITH/projects/OneStep
 git status
-npm run lint
-npm run typecheck
-npm run build
+cd web && npm run lint && npm run typecheck && npm run build
 ```
 
-Create an empty GitHub repository without adding a README or .gitignore. Then
-commit and push this application:
+Because the history was rewritten, the existing remote cannot be updated with a
+normal push. Choose one:
+
+- **Replace the existing repository's history** — destructive, and anyone else
+  who cloned it must re-clone:
 
 ```bash
-git add .
-git commit -m "Prepare OneStep for Vercel deployment"
-git branch -M main
-git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPOSITORY.git
+git push --force-with-lease origin main
+```
+
+- **Or push to a new, empty repository** and leave the old one untouched:
+
+```bash
+git remote set-url origin https://github.com/YOUR_USERNAME/NEW_REPOSITORY.git
 git push -u origin main
 ```
 
-If an `origin` remote already exists, inspect it with `git remote -v` and use
-`git remote set-url origin ...` instead of adding a second origin.
+The local `.env.local`, `.next`, `node_modules`, `.vercel`, and Android build
+directories are ignored and must not be committed.
 
 The local `.env.local`, `.next`, `node_modules`, and `.vercel` directories
 are ignored and must not be committed.
@@ -90,11 +99,11 @@ are ignored and must not be committed.
 2. Choose **Add New > Project**.
 3. Connect GitHub if needed and import the repository from step 3.
 4. Confirm **Framework Preset: Next.js**.
-5. Set **Root Directory**:
-   - Use `.` if the GitHub repository contains the contents of this `web`
-     directory directly. This matches the current local Git layout.
-   - Use `web` only if you later push the entire parent `OneStep` directory
-     as one repository.
+5. Set **Root Directory** to `web`. The repository root is now the parent
+   `OneStep` directory, so Vercel will not find `package.json` at `.`. **If this
+   project was already deployed with the root directory set to `.`, change it
+   under Settings > Build and Deployment > Root Directory before the next
+   deploy, or the build will fail.**
 6. Leave the install command, build command, and output directory on Vercel's
    detected defaults. The expected build command is `npm run build`.
 7. The repository pins Node.js `22.x`. You can confirm this under

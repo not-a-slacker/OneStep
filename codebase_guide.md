@@ -16,13 +16,19 @@ work. For the longer product and architecture history, see
 ```text
 OneStep/
 ├── codebase_guide.md
+├── IMPLEMENTATION_STATUS.md
+├── ROADMAP_AND_FIXES.md
 ├── PROJECT_DOCUMENTATION.md
+├── .github/workflows/quality.yml
+├── android/
 ├── supabase/
 │   ├── schema.sql
 │   ├── update_schema.sql
 │   ├── phase_8_14_improvements.sql
 │   ├── gamification_system.sql
-│   └── manual_focus_project_assignment.sql
+│   ├── manual_focus_project_assignment.sql
+│   ├── milestone_1_integrity.sql
+│   └── milestone_1_verification.sql
 └── web/
     ├── src/app/
     │   ├── (auth)/login/page.tsx
@@ -42,7 +48,8 @@ OneStep/
     └── VERCEL_DEPLOYMENT.md
 ```
 
-The `web` directory is the application Git root in the current checkout.
+The OneStep root is the Git root. An Android client lives in `android/`; see
+[IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for its scope.
 
 ## Technology stack
 
@@ -110,7 +117,9 @@ Habit completions are individual rows in `habit_logs`, unique per habit/date.
 - Every eligible day in the expanded week/month/year calendar is clickable.
 - Clicking an incomplete day checks it in; clicking a completed day undoes it.
 - Dates before habit creation and future dates are disabled.
-- Daily and weekly streaks are recalculated from logs.
+- Daily and weekly streaks are recalculated **by the database** from the logs.
+  The streak columns are not writable by clients, because `longest_streak` feeds
+  the XP formula.
 - Habit ordering is persisted with `display_order`.
 
 ### Gamification
@@ -128,8 +137,8 @@ The dashboard and header use the shared calculator in
 | `authStore.ts` | Auth user, profile, readiness, profile refresh |
 | `projectStore.ts` | Project CRUD and protected `Misc.` project |
 | `taskStore.ts` | Task CRUD, project fallback, completion timestamps |
-| `habitStore.ts` | Habit CRUD, logs, ordering, streak recalculation |
-| `pomodoroStore.ts` | Timer state, persistence, sessions, manual focus |
+| `habitStore.ts` | Habit CRUD, logs, ordering, server streak read-back |
+| `pomodoroStore.ts` | Timer state, countdown, persistence, sessions, manual focus |
 
 All user-owned tables use Supabase RLS. The browser uses only a publishable
 (or legacy anonymous) key; never expose a secret or service-role key.
@@ -149,7 +158,13 @@ supabase/update_schema.sql                  # only if not previously applied
 supabase/phase_8_14_improvements.sql
 supabase/gamification_system.sql
 supabase/manual_focus_project_assignment.sql
+supabase/milestone_1_integrity.sql
 ```
+
+Then run `supabase/milestone_1_verification.sql` to confirm every protection is
+installed. `milestone_1_integrity.sql` must ship with the matching client
+release: the client stopped writing habit streaks and the database stopped
+allowing it.
 
 Do not run the full `schema.sql` over a populated database.
 
