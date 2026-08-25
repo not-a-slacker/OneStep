@@ -1,0 +1,6 @@
+# Copy this file to local.properties and update the values.
+# On Windows, escape backslashes in sdk.dir or use forward slashes.
+sdk.dir=C:/Users/your-user/AppData/Local/Android/Sdk
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+
