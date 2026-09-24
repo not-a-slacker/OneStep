@@ -149,21 +149,29 @@ ORDER BY 2 DESC, 1;
 -- ---------------------------------------------------------------------------
 -- End-to-end check (optional, and the only way to prove the grants work).
 --
--- Grab an access token by logging into the web app and running this in the
--- browser console:
+-- The SQL editor bypasses column grants, so only a real request as the
+-- `authenticated` role can prove them. In the browser console on the logged-in
+-- app (type `allow pasting` first if Chrome blocks it), replace the three
+-- constants and run:
 --
---   (await window.supabase?.auth.getSession())?.data.session?.access_token
+--   const URL_ = 'https://<PROJECT_REF>.supabase.co'
+--   const KEY = '<PUBLISHABLE_KEY>'
+--   const HABIT_ID = '<UUID of one of your habits>'
+--   const tokenKey = Object.keys(localStorage).find(k => /^sb-.*-auth-token$/.test(k))
+--   const token = JSON.parse(localStorage[tokenKey]).access_token
+--   const patch = async (body) => {
+--     const r = await fetch(`${URL_}/rest/v1/habits?id=eq.${HABIT_ID}`, {
+--       method: 'PATCH',
+--       headers: { apikey: KEY, Authorization: `Bearer ${token}`,
+--                  'Content-Type': 'application/json', Prefer: 'return=representation' },
+--       body: JSON.stringify(body),
+--     })
+--     console.log(JSON.stringify(body), '->', r.status, await r.text())
+--   }
+--   await patch({ longest_streak: 9999 })   // must be 403 (permission denied, 42501)
+--   await patch({ display_order: 0 })       // control: must be 200
 --
--- ...or read `sb-<project-ref>-auth-token` from localStorage. Then, replacing
--- <PROJECT_REF>, <TOKEN>, <PUBLISHABLE_KEY>, and <HABIT_ID>:
---
---   curl -i -X PATCH \
---     'https://<PROJECT_REF>.supabase.co/rest/v1/habits?id=eq.<HABIT_ID>' \
---     -H 'apikey: <PUBLISHABLE_KEY>' \
---     -H 'Authorization: Bearer <TOKEN>' \
---     -H 'Content-Type: application/json' \
---     -d '{"longest_streak": 9999}'
---
--- Before this migration that returned 200 and inflated the user's XP.
--- After it, PostgREST should return 403 with a permission-denied message.
+-- Before this migration the first request returned 200 and inflated the user's
+-- XP. If the control returns 403, the column grant is too strict.
+-- The access token is a live login: never paste it into chat or commit it.
 -- ---------------------------------------------------------------------------
