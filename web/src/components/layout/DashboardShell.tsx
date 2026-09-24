@@ -1,11 +1,20 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Sidebar from "@/components/layout/Sidebar"
 import Header from "@/components/layout/Header"
+import { usePomodoroStore } from "@/store/pomodoroStore"
 
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const hydrateTimer = usePomodoroStore((state) => state.hydrateTimer)
+
+  // Hydrate at the shell level so a running focus session keeps counting down,
+  // finishes, and records its duration on every dashboard route — not only on
+  // /pomodoro (ROADMAP B-1).
+  useEffect(() => {
+    hydrateTimer()
+  }, [hydrateTimer])
 
   return (
     <div className="flex min-h-screen">

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   BellRing,
   BrainCircuit,
@@ -17,7 +17,8 @@ import {
   Volume2,
 } from "lucide-react"
 import { format } from "date-fns"
-import { usePomodoroStore, type PomodoroMode } from "@/store/pomodoroStore"
+import { requestNotificationPermission, unlockAlarm } from "@/lib/alarm"
+import { usePomodoroStore } from "@/store/pomodoroStore"
 import { useProjectStore } from "@/store/projectStore"
 import { useTaskStore } from "@/store/taskStore"
 
@@ -35,12 +36,11 @@ export default function PomodoroPage() {
     shortBreakDuration,
     longBreakDuration,
     error,
+    periodMessage,
     setMode,
     startTimer,
     pauseTimer,
     resetTimer,
-    tick,
-    completeSession,
     setTask,
     updateSettings,
     fetchSessions,
@@ -62,9 +62,6 @@ export default function PomodoroPage() {
   const [shortInput, setShortInput] = useState("5")
   const [longInput, setLongInput] = useState("15")
   const [visibleHistoryCount, setVisibleHistoryCount] = useState(HISTORY_PAGE_SIZE)
-  const [periodMessage, setPeriodMessage] = useState<string | null>(null)
-  const audioContextRef = useRef<AudioContext | null>(null)
-  const completionInProgress = useRef(false)
 
   useEffect(() => {
     hydrateTimer()
@@ -72,79 +69,12 @@ export default function PomodoroPage() {
       .then(() => ensureMiscProject())
   }, [ensureMiscProject, fetchProjects, fetchSessions, fetchTasks, hydrateTimer])
 
-  const unlockAlarm = useCallback(async () => {
-    if (!audioContextRef.current) {
-      audioContextRef.current = new AudioContext()
-    }
-    if (audioContextRef.current.state === "suspended") {
-      await audioContextRef.current.resume()
-    }
-  }, [])
-
-  const playAlarm = useCallback(async () => {
-    await unlockAlarm()
-    const context = audioContextRef.current
-    if (!context) return
-
-    const start = context.currentTime
-    ;[0, 0.32, 0.64].forEach((offset, index) => {
-      const oscillator = context.createOscillator()
-      const gain = context.createGain()
-      oscillator.type = index === 2 ? "sine" : "triangle"
-      oscillator.frequency.setValueAtTime(index === 2 ? 1046 : 880, start + offset)
-      gain.gain.setValueAtTime(0.0001, start + offset)
-      gain.gain.exponentialRampToValueAtTime(0.28, start + offset + 0.02)
-      gain.gain.exponentialRampToValueAtTime(0.0001, start + offset + 0.24)
-      oscillator.connect(gain)
-      gain.connect(context.destination)
-      oscillator.start(start + offset)
-      oscillator.stop(start + offset + 0.25)
-    })
-  }, [unlockAlarm])
-
-  const sendCompletionNotification = useCallback((completedMode: PomodoroMode) => {
-    const wasFocus = completedMode === "focus"
-    const title = wasFocus ? "Focus session complete" : "Break complete"
-    const body = wasFocus
-      ? "Great work. Step away for a short break."
-      : "Your break is over. Ready for the next focus session?"
-
-    setPeriodMessage(`${title}. ${body}`)
-    window.setTimeout(() => setPeriodMessage(null), 8000)
-
-    if ("Notification" in window && Notification.permission === "granted") {
-      new Notification(title, { body, icon: "/favicon.ico", tag: "onestep-timer" })
-    }
-  }, [])
-
-  const handlePeriodComplete = useCallback(async () => {
-    if (completionInProgress.current) return
-    completionInProgress.current = true
-    try {
-      const completedMode = await completeSession()
-      await playAlarm()
-      sendCompletionNotification(completedMode)
-    } finally {
-      completionInProgress.current = false
-    }
-  }, [completeSession, playAlarm, sendCompletionNotification])
-
-  useEffect(() => {
-    if (!isActive) return
-    if (timeRemaining === 0) {
-      void handlePeriodComplete()
-      return
-    }
-    const interval = window.setInterval(tick, 1000)
-    return () => window.clearInterval(interval)
-  }, [handlePeriodComplete, isActive, tick, timeRemaining])
-
   const handleStart = async () => {
     clearError()
+    // Both must happen inside the click gesture: browsers only resume an
+    // AudioContext and grant notification permission from a real interaction.
     await unlockAlarm()
-    if ("Notification" in window && Notification.permission === "default") {
-      await Notification.requestPermission()
-    }
+    await requestNotificationPermission()
     await startTimer()
   }
 

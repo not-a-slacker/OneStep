@@ -15,13 +15,42 @@ symptom, where it lives, and the suggested fix. Severity legend:
 
 ---
 
+## 0. Milestone 1 status
+
+Milestone 1 is implemented on the `milestone-1-hardening` branch. Items marked
+**Done** below are closed by that work.
+
+| Item | Status | Where |
+|---|---|---|
+| S-0 version control | Done | Root git repo, web history preserved |
+| S-1 habit streak tampering | Done | `supabase/milestone_1_integrity.sql`, `habitStore.ts` |
+| S-2 focus session limits | Done | `supabase/milestone_1_integrity.sql` |
+| S-3 default project flag | Done | `supabase/milestone_1_integrity.sql` |
+| S-4 habit log ownership | Done | `supabase/milestone_1_integrity.sql` |
+| B-1 timer stops off-page | Done | `pomodoroStore.ts`, `lib/alarm.ts`, `DashboardShell.tsx` |
+| B-3 streak never decreased | Done | Closed by S-1 |
+| B-13 delete confirmations | Done | `components/ui/ConfirmDialog.tsx` and the three pages |
+| B-15 CI cannot build | Done | `.github/workflows/quality.yml`, `lib/supabase.ts` |
+| B-16 modal accessibility | Partial | New `ConfirmDialog` traps focus; the task/habit/settings modals still do not |
+
+**The SQL has not been executed.** There is no local PostgreSQL, Docker, or
+Supabase CLI in this environment, so `milestone_1_integrity.sql` was written and
+reviewed but never run. Apply it in the Supabase SQL editor and then run
+`milestone_1_verification.sql`, which reports PASS/FAIL per protection.
+
+**Apply the SQL and the client together.** The client no longer writes habit
+streak columns and the migration revokes the client's permission to do so.
+Deploying one without the other breaks habit check-ins.
+
+---
+
 ## 1. Security and data integrity
 
 The backend gets the hard part right — RLS on every table, ownership-validating
 triggers, and XP computed server-side from source rows. The gaps below are all
 about *inputs* to that trusted computation, which are currently unguarded.
 
-### S-0 · Most of the project is not under version control — **P0**
+### S-0 · Most of the project is not under version control — **P0** · DONE
 
 Only `web/` is a git repository. The root `.git/` is an empty directory, so
 `android/` (about 1,000 lines of Kotlin), `supabase/` (the entire schema and all
@@ -35,7 +64,7 @@ either way. Add a root `.gitignore` covering `node_modules/`, `.next/`,
 `.env*`. Confirm `web/.env.local` stays ignored after the move; it currently
 holds a live project URL and publishable key.
 
-### S-1 · `habits.longest_streak` is client-writable and feeds XP — **P0**
+### S-1 · `habits.longest_streak` is client-writable and feeds XP — **P0** · DONE
 
 `recalculate_user_gamification` awards 25 XP per seven days of `longest_streak`,
 but that column is written by the browser
@@ -53,7 +82,7 @@ recalculates `current_streak` / `longest_streak` for the affected habit, then
 the client-side streak write; keep the client calculation only for optimistic
 display.
 
-### S-2 · Focus-session values are unconstrained — **P0**
+### S-2 · Focus-session values are unconstrained — **P0** · DONE
 
 `pomodoro_sessions` only checks `duration >= 0` and `planned_duration > 0`.
 Nothing prevents a client from inserting a 500,000-minute session, a session
@@ -68,7 +97,7 @@ as `duration <= 1440` and `planned_duration <= 1440`, and
 `duration <= EXTRACT(EPOCH FROM (end_time - start_time)) / 60 + 1`. Optionally
 cap total logged minutes per user per day.
 
-### S-3 · `projects.is_default` is client-writable — **P1**
+### S-3 · `projects.is_default` is client-writable — **P1** · DONE
 
 The `Misc.` project invariant is protected against deletion by
 `reassign_project_before_delete`, but a client can simply `UPDATE` its own
@@ -83,7 +112,7 @@ and trivially bypassed.
 `is_default`, and rejects renaming or completing a row where `is_default` is
 true.
 
-### S-4 · `habit_logs` has no ownership trigger — **P1**
+### S-4 · `habit_logs` has no ownership trigger — **P1** · DONE
 
 `tasks` and `pomodoro_sessions` both have triggers verifying the referenced
 parent row belongs to the same user. `habit_logs` does not — its RLS policy only
@@ -110,11 +139,16 @@ field, plus `CHECK (color ~ '^#[0-9a-fA-F]{6}$')`.
 Every dashboard page is a client component guarded only by a redirect inside
 [AuthProvider.tsx](web/src/components/providers/AuthProvider.tsx). RLS means no
 data actually leaks, but the app shell renders before the redirect resolves and
-there is no `middleware.ts` and no server-side session check.
+there is no server-side session check.
 
-**Fix:** adopt `@supabase/ssr` with a `middleware.ts` that refreshes the session
+**Fix:** adopt `@supabase/ssr` with a root `proxy.ts` that refreshes the session
 cookie and redirects unauthenticated requests before the page streams. This also
 enables server components and removes the loading flash.
+
+> Next.js 16 renamed the `middleware` file convention and its named export to
+> `proxy`; the old names are deprecated. Use `proxy.ts` exporting `proxy`, not
+> `middleware.ts`. See
+> `web/node_modules/next/dist/docs/01-app/02-guides/upgrading/version-16.md`.
 
 ### S-7 · Account-recovery and password policy gaps — **P1**
 
@@ -150,7 +184,7 @@ uses less battery.
 
 ## 2. Bugs
 
-### B-1 · The web timer stops counting when you leave `/pomodoro` — **P0**
+### B-1 · The web timer stops counting when you leave `/pomodoro` — **P0** · DONE
 
 The one-second interval driving the countdown lives in the page component
 ([pomodoro/page.tsx:138](web/src/app/(dashboard)/pomodoro/page.tsx:138)), not in
@@ -176,7 +210,7 @@ session" cadence.
 **Fix:** derive `sessionsCompleted` from today's timer-created sessions only, or
 track the break cadence in a separate counter.
 
-### B-3 · `longest_streak` never decreases — **P1**
+### B-3 · `longest_streak` never decreases — **P1** · DONE
 
 `Math.max(habit.longest_streak, streak.longest)` is monotonic, so undoing
 check-ins leaves the inflated record — and its 25 XP per seven days — in place
@@ -271,7 +305,7 @@ day.
 **Fix:** store an explicit IANA timezone on `profiles`, and resolve "today"
 against it consistently on both clients and in SQL.
 
-### B-13 · Destructive actions have no confirmation — **P1**
+### B-13 · Destructive actions have no confirmation — **P1** · DONE
 
 Deleting a task, a project, or a habit is immediate and irreversible — no dialog,
 no undo. Deleting a project also silently reassigns all its tasks and sessions to
@@ -289,7 +323,7 @@ rolls back the local array but leaves the database half-reordered.
 **Fix:** a single RPC taking the ordered ID array and updating in one
 transaction.
 
-### B-15 · CI almost certainly cannot build — **P1**
+### B-15 · CI almost certainly cannot build — **P1** · DONE
 
 [quality.yml](web/.github/workflows/quality.yml) runs `npm run build` without
 `NEXT_PUBLIC_SUPABASE_URL` or `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
@@ -307,7 +341,7 @@ instead of a non-null assertion. Add an Android job
 (`./gradlew testDebugUnitTest lintDebug assembleDebug`) — nothing currently
 builds the mobile app in CI.
 
-### B-16 · Modals are not accessible — **P2**
+### B-16 · Modals are not accessible — **P2** · PARTIAL
 
 The task, habit, settings, and manual-entry modals set `role="dialog"` and
 `aria-modal` but do not trap focus, close on Escape, or restore focus to the

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useHabitStore, Habit, HabitLog } from "@/store/habitStore";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { Plus, Flame, Check, Trash2, CalendarDays, Edit3, BarChart2, ChevronLeft, ChevronRight, GripVertical, ArrowUp, ArrowDown, AlertCircle } from "lucide-react";
 import { format, subDays, differenceInDays, startOfWeek, endOfWeek, eachDayOfInterval, startOfMonth, endOfMonth, startOfYear, endOfYear, addMonths, subMonths, addYears, subYears } from "date-fns";
 
@@ -26,6 +27,8 @@ export default function HabitsPage() {
   const [expandedHabitId, setExpandedHabitId] = useState<string | null>(null);
   const [draggedHabitId, setDraggedHabitId] = useState<string | null>(null);
   const [backdateHabit, setBackdateHabit] = useState<Habit | null>(null);
+  const [habitPendingDeletion, setHabitPendingDeletion] = useState<Habit | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [backdateDate, setBackdateDate] = useState(format(subDays(new Date(), 1), 'yyyy-MM-dd'));
 
   // Form State
@@ -110,6 +113,14 @@ export default function HabitsPage() {
     next.splice(targetIndex, 0, moved);
     setDraggedHabitId(null);
     void reorderHabits(next.map((habit) => habit.id));
+  };
+
+  const confirmDeleteHabit = async () => {
+    if (!habitPendingDeletion) return;
+    setDeleting(true);
+    const removed = await deleteHabit(habitPendingDeletion.id);
+    setDeleting(false);
+    if (removed) setHabitPendingDeletion(null);
   };
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -199,7 +210,7 @@ export default function HabitsPage() {
                     <button 
                       type="button"
                       aria-label={`Delete ${habit.name}`}
-                      onClick={(e) => { e.stopPropagation(); void deleteHabit(habit.id); }}
+                      onClick={(e) => { e.stopPropagation(); setHabitPendingDeletion(habit); }}
                       className="p-1.5 text-zinc-500 hover:text-[var(--color-danger)]"
                     >
                       <Trash2 size={16} />
@@ -389,6 +400,23 @@ export default function HabitsPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={Boolean(habitPendingDeletion)}
+        title="Delete this habit?"
+        description={
+          <>
+            <strong className="text-zinc-200">{habitPendingDeletion?.name}</strong> and all{" "}
+            {habitPendingDeletion ? (logs[habitPendingDeletion.id]?.length ?? 0) : 0} of its
+            check-ins will be permanently deleted, and the XP earned from them will be
+            removed. This cannot be undone.
+          </>
+        }
+        confirmLabel="Delete habit"
+        busy={deleting}
+        onConfirm={() => void confirmDeleteHabit()}
+        onCancel={() => setHabitPendingDeletion(null)}
+      />
     </div>
   );
 }

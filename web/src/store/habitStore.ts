@@ -1,11 +1,4 @@
 import { create } from 'zustand'
-import {
-  differenceInCalendarDays,
-  format,
-  parseISO,
-  startOfWeek,
-  subWeeks,
-} from 'date-fns'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/authStore'
 
@@ -41,80 +34,6 @@ interface HabitState {
   deleteHabit: (habitId: string) => Promise<boolean>
   reorderHabits: (orderedIds: string[]) => Promise<boolean>
   clearError: () => void
-}
-
-function calculateDailyStreak(logs: HabitLog[]) {
-  const dates = [...new Set(logs.map((log) => log.completed_at))].sort()
-  if (!dates.length) return { current: 0, longest: 0 }
-
-  let longest = 1
-  let run = 1
-  for (let index = 1; index < dates.length; index += 1) {
-    const difference = differenceInCalendarDays(parseISO(dates[index]), parseISO(dates[index - 1]))
-    run = difference === 1 ? run + 1 : 1
-    longest = Math.max(longest, run)
-  }
-
-  const today = new Date()
-  const lastDate = parseISO(dates[dates.length - 1])
-  const distanceFromToday = differenceInCalendarDays(today, lastDate)
-  if (distanceFromToday > 1) return { current: 0, longest }
-
-  let current = 1
-  for (let index = dates.length - 1; index > 0; index -= 1) {
-    if (differenceInCalendarDays(parseISO(dates[index]), parseISO(dates[index - 1])) !== 1) break
-    current += 1
-  }
-  return { current, longest }
-}
-
-function calculateWeeklyStreak(habit: Habit, logs: HabitLog[]) {
-  const target = habit.frequency === 'weekly' ? 1 : habit.target_days_per_week
-  const counts = new Map<string, number>()
-  logs.forEach((log) => {
-    const week = format(startOfWeek(parseISO(log.completed_at), { weekStartsOn: 1 }), 'yyyy-MM-dd')
-    counts.set(week, (counts.get(week) ?? 0) + 1)
-  })
-
-  const successfulWeeks = [...counts.entries()]
-    .filter(([, count]) => count >= target)
-    .map(([week]) => week)
-    .sort()
-
-  if (!successfulWeeks.length) return { current: 0, longest: 0 }
-
-  let longest = 1
-  let run = 1
-  for (let index = 1; index < successfulWeeks.length; index += 1) {
-    const difference = differenceInCalendarDays(
-      parseISO(successfulWeeks[index]),
-      parseISO(successfulWeeks[index - 1]),
-    )
-    run = difference === 7 ? run + 1 : 1
-    longest = Math.max(longest, run)
-  }
-
-  const currentWeek = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
-  const previousWeek = format(subWeeks(parseISO(currentWeek), 1), 'yyyy-MM-dd')
-  const anchor = counts.get(currentWeek) && (counts.get(currentWeek) ?? 0) >= target
-    ? currentWeek
-    : previousWeek
-
-  if ((counts.get(anchor) ?? 0) < target) return { current: 0, longest }
-
-  let current = 0
-  let cursor = parseISO(anchor)
-  while ((counts.get(format(cursor, 'yyyy-MM-dd')) ?? 0) >= target) {
-    current += 1
-    cursor = subWeeks(cursor, 1)
-  }
-  return { current, longest }
-}
-
-function calculateStreak(habit: Habit, logs: HabitLog[]) {
-  return habit.frequency === 'daily'
-    ? calculateDailyStreak(logs)
-    : calculateWeeklyStreak(habit, logs)
 }
 
 export const useHabitStore = create<HabitState>((set, get) => ({
@@ -267,22 +186,27 @@ export const useHabitStore = create<HabitState>((set, get) => ({
       nextLogs = [...(get().logs[habitId] ?? []), data as HabitLog]
     }
 
-    const streak = calculateStreak(habit, nextLogs)
-    const longestStreak = Math.max(habit.longest_streak, streak.longest)
-    const { error: streakError } = await supabase
+    // Streaks are recalculated by a database trigger and the streak columns are
+    // no longer writable by the client, so read the authoritative values back
+    // instead of computing them here. The old client-side write let any client
+    // inflate longest_streak, which feeds the XP formula (ROADMAP S-1), and was
+    // monotonic, so undoing a check-in never gave the XP back (B-3).
+    // Requires supabase/milestone_1_integrity.sql to have been applied.
+    const { data: refreshed, error: refreshError } = await supabase
       .from('habits')
-      .update({ current_streak: streak.current, longest_streak: longestStreak })
+      .select('*')
       .eq('id', habitId)
       .eq('user_id', user.id)
+      .single()
 
-    if (streakError) {
-      set({ error: streakError.message })
+    if (refreshError) {
+      set({ error: refreshError.message })
       return false
     }
 
     set((state) => ({
       habits: state.habits.map((item) => item.id === habitId
-        ? { ...item, current_streak: streak.current, longest_streak: longestStreak }
+        ? (refreshed as Habit | null) ?? item
         : item),
       logs: { ...state.logs, [habitId]: nextLogs },
       error: null,

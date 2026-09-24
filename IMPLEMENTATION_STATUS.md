@@ -33,15 +33,18 @@ OneStep/
 ├── ROADMAP_AND_FIXES.md          ← next steps and fixes
 ├── PROJECT_DOCUMENTATION.md      ← older exhaustive file-by-file reference (pre-Android)
 ├── codebase_guide.md             ← condensed web-only guide
+├── .github/workflows/            ← CI for both web and android
 ├── supabase/                     ← SQL schema + incremental migrations
-├── web/                          ← Next.js 16 app (its own git root)
+├── web/                          ← Next.js 16 app
 └── android/                      ← Kotlin / Jetpack Compose client
 ```
 
-> **Version-control note:** only `web/` is a real git repository (3 commits,
-> HEAD `ac162f1`). The root `.git/` directory is empty and non-functional, so
-> `android/`, `supabase/`, and the root markdown files are **not tracked by any
-> repository**. See ROADMAP item S-0.
+> **Version control (resolved in Milestone 1):** the whole project is now one
+> git repository rooted at `OneStep/`. The three original `web/` commits were
+> rewritten so their files sit under `web/` and grafted into it, so the history
+> is intact. The `origin` remote still points at
+> `github.com/not-a-slacker/OneStep`, which holds the *old* layout — publishing
+> the new history needs a force push or a fresh remote. See ROADMAP S-0.
 
 ---
 
@@ -98,6 +101,8 @@ default project per user.
 | `phase_8_14_improvements.sql` | Legacy DBs | FK changes, CHECK constraints, indexes, stronger RLS |
 | `gamification_system.sql` | Legacy DBs | XP functions, triggers, column grants |
 | `manual_focus_project_assignment.sql` | Legacy DBs | Direct project assignment for taskless focus |
+| `milestone_1_integrity.sql` | Legacy DBs | Server-owned habit streaks, habit-log ownership, default-project protection, focus-session limits |
+| `milestone_1_verification.sql` | Any | Read-only PASS/FAIL report on the above |
 
 ---
 
@@ -207,9 +212,12 @@ Five Zustand stores — `authStore`, `projectStore`, `taskStore`, `habitStore`,
 
 ### 4.11 Delivery
 
-[quality.yml](web/.github/workflows/quality.yml) runs lint, typecheck, and build
-on pushes to `main` and on pull requests. `VERCEL_DEPLOYMENT.md` documents
-hosting, and the project is pinned to Node 22.x.
+[quality.yml](.github/workflows/quality.yml) runs lint, typecheck, and build for
+the web app, plus unit tests, lint, and `assembleDebug` for Android, on pushes to
+`main` and on pull requests. `VERCEL_DEPLOYMENT.md` documents hosting, and the
+project is pinned to Node 22.x. The web app is developed inside WSL (Ubuntu, Node
+22 via nvm); see the README for why `node_modules` must not be shared between
+Windows Node and WSL Node.
 
 ---
 

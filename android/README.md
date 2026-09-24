@@ -51,6 +51,12 @@ secret or service-role key in this project.
 The repository includes the Gradle wrapper scripts, wrapper JAR, and Gradle 8.13
 distribution configuration.
 
+CI runs the same three tasks on every push and pull request; see
+`.github/workflows/quality.yml` at the repository root. It supplies placeholder
+Supabase values through the `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY`
+environment variables, which `app/build.gradle.kts` reads in preference to
+`local.properties`.
+
 ## Current data behavior
 
 Starting an online focus period creates a zero-duration `pomodoro_sessions` row.

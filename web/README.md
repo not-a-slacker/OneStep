@@ -57,13 +57,17 @@ For a new Supabase project, apply:
 ```
 
 For an existing OneStep database that already has the original schema and
-`update_schema.sql`, apply:
+`update_schema.sql`, apply in this order:
 
 ```text
 ../supabase/phase_8_14_improvements.sql
 ../supabase/gamification_system.sql
 ../supabase/manual_focus_project_assignment.sql
+../supabase/milestone_1_integrity.sql
 ```
+
+Then confirm the result with `../supabase/milestone_1_verification.sql`, which
+only reads and should report PASS on every row.
 
 The migration adds:
 
@@ -76,9 +80,15 @@ The migration adds:
 - Data validation, uniqueness, indexes, and stronger RLS policies
 - Server-calculated XP, levels, achievement inputs, and protected score fields
 - Direct project assignment for taskless manual focus sessions
+- Server-calculated habit streaks, with the streak columns revoked from clients
+- Ownership validation on habit check-ins
+- A protected default-project flag that clients cannot clear
+- Plausibility limits on focus-session durations and timestamps
 
-Apply the migration before running the updated UI because the client expects the
-new columns.
+Apply the migrations before running the updated UI because the client expects
+the new behaviour. In particular, `milestone_1_integrity.sql` must be applied
+together with this release: the client no longer writes habit streaks, and the
+database no longer permits it.
 
 ## Quality checks
 

@@ -29,6 +29,7 @@ import {
   YAxis,
 } from "recharts"
 import { eachDayOfInterval, format, isPast, isToday, subDays } from "date-fns"
+import ConfirmDialog from "@/components/ui/ConfirmDialog"
 import { useTaskStore, type Task } from "@/store/taskStore"
 import { useProjectStore, type Project } from "@/store/projectStore"
 import { usePomodoroStore } from "@/store/pomodoroStore"
@@ -69,6 +70,8 @@ export default function TasksPage() {
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [form, setForm] = useState<TaskFormState>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
+  const [taskPendingDeletion, setTaskPendingDeletion] = useState<Task | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     void Promise.all([fetchTasks(), fetchProjects(), fetchSessions()])
@@ -168,6 +171,14 @@ export default function TasksPage() {
     setForm(EMPTY_FORM)
   }
 
+  const confirmDeleteTask = async () => {
+    if (!taskPendingDeletion) return
+    setDeleting(true)
+    const removed = await deleteTask(taskPendingDeletion.id)
+    setDeleting(false)
+    if (removed) setTaskPendingDeletion(null)
+  }
+
   const submitTask = async (event: React.FormEvent) => {
     event.preventDefault()
     const resolvedProjectId = form.projectId || miscProject?.id
@@ -262,7 +273,7 @@ export default function TasksPage() {
           loading={loading}
           onEdit={openEditModal}
           onToggle={(task) => void updateTaskStatus(task.id, "completed")}
-          onDelete={(task) => void deleteTask(task.id)}
+          onDelete={(task) => setTaskPendingDeletion(task)}
         />
         <TaskColumn
           title={`Completed · ${completedTasks.length}`}
@@ -273,9 +284,25 @@ export default function TasksPage() {
           completed
           onEdit={openEditModal}
           onToggle={(task) => void updateTaskStatus(task.id, "pending")}
-          onDelete={(task) => void deleteTask(task.id)}
+          onDelete={(task) => setTaskPendingDeletion(task)}
         />
       </section>
+
+      <ConfirmDialog
+        open={Boolean(taskPendingDeletion)}
+        title="Delete this task?"
+        description={
+          <>
+            <strong className="text-zinc-200">{taskPendingDeletion?.title}</strong> will be
+            permanently deleted. Any focus sessions recorded against it are kept, but they
+            will no longer be linked to a task. This cannot be undone.
+          </>
+        }
+        confirmLabel="Delete task"
+        busy={deleting}
+        onConfirm={() => void confirmDeleteTask()}
+        onCancel={() => setTaskPendingDeletion(null)}
+      />
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="task-modal-title">
