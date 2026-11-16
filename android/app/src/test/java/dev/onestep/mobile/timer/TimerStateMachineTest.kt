@@ -13,7 +13,9 @@ class TimerStateMachineTest {
         )
 
         assertEquals(TimerStatus.Running, started.status)
-        assertEquals(100_000, started.targetEndEpochMillis)
+        // 100_000L, not 100_000: targetEndEpochMillis is Long?, so an Int literal
+        // selects assertEquals(Object, Object) and Integer never equals Long.
+        assertEquals(100_000L, started.targetEndEpochMillis)
         assertEquals(45, started.displayedRemainingSeconds(55_000))
     }
 
