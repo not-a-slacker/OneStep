@@ -299,14 +299,21 @@ entry, gamification display, widgets, and any UI or instrumentation tests.
 
 ## 7. Verified state of the code
 
-- The web app type-checks, lints, and produces a production Next.js build
-  (`.next/` and `tsconfig.tsbuildinfo` are present from a recent local build).
-- The Android module is structurally complete and self-consistent, and its
-  release configuration and wrapper are in place. Note that `gradlew` and
-  `gradlew.bat` are hand-written minimal launchers rather than the standard
-  generated scripts.
-- No end-to-end or integration tests exist for either client, and no CI job
-  builds the Android module.
+- Both clients build in CI on every push to `main` and every pull request. The
+  first fully green run was `4b7e258`
+  (GitHub Actions run 43916004968).
+- Web: type-checks, lints, and produces a production Next.js build, locally in
+  WSL and in CI.
+- Android: compiles, passes its unit tests, passes `lintDebug`, and assembles a
+  debug APK in CI. **This had never happened before November 2026.** The first
+  CI runs uncovered three defects that stopped the module building at all: a
+  build-script error under Kotlin 2.3 (`kotlinOptions` is rejected), an import
+  that shadowed Compose's `RowScope.weight`, and an `Int`-vs-`Long` assertion
+  that failed the timer test. All three are fixed. The app has still never been
+  run on a device or emulator.
+- `gradlew` and `gradlew.bat` are hand-written minimal launchers rather than the
+  standard generated scripts. They work in CI.
+- No end-to-end or integration tests exist for either client.
 
 Known defects, security gaps, and the prioritised plan to close them are in
 [ROADMAP_AND_FIXES.md](ROADMAP_AND_FIXES.md).
