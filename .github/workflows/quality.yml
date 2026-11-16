@@ -56,7 +56,10 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - uses: android-actions/setup-android@v3
+      # No SDK setup step: ubuntu-latest ships an Android SDK with licenses
+      # accepted, and AGP downloads any missing platform itself.
+      # android-actions/setup-android@v3 installed the legacy `tools` package by
+      # default, which Google has removed, so sdkmanager failed before Gradle ran.
 
       - uses: gradle/actions/setup-gradle@v4
 
