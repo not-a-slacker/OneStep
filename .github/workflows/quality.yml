@@ -63,7 +63,25 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v5
 
-      - run: ./gradlew testDebugUnitTest lintDebug assembleDebug --stacktrace
+      - name: Unit tests, lint, assemble
+        run: |
+          set -o pipefail
+          ./gradlew testDebugUnitTest lintDebug assembleDebug --stacktrace 2>&1 | tee gradle.log
+
+      # Job logs require a GitHub login, but annotations are public and appear on
+      # the commit page, so surface the actual Gradle error as annotations.
+      - name: Annotate Gradle failure
+        if: failure()
+        run: |
+          [ -f gradle.log ] || exit 0
+          escape() { local m="${1//'%'/'%25'}"; m="${m//$'\r'/}"; printf '%s' "${m//$'\n'/'%0A'}"; }
+          # Kotlin compiler errors look like: "e: file:///abs/path/File.kt:12:5 message"
+          grep -E '^e: ' gradle.log | head -10 | while IFS= read -r line; do
+            echo "::error title=Kotlin compile error::$(escape "${line#e: file://$GITHUB_WORKSPACE/}")"
+          done
+          summary=$(awk '/^\* What went wrong:/{f=1} /^\* Try:/{f=0} f' gradle.log | head -40)
+          [ -n "$summary" ] && echo "::error title=Gradle failure::$(escape "$summary")"
+          exit 0
 
       - name: Upload lint and test reports
         if: failure()
