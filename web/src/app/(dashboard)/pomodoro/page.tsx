@@ -103,7 +103,7 @@ export default function PomodoroPage() {
   const testNotification = () => {
     setTestNotificationResult(
       sendTestNotification()
-        ? "Sent. If no popup appeared, Windows is hiding Chrome's notifications: check Settings → System → Notifications (Chrome must be on, and Do not disturb off)."
+        ? "Sent. If no popup appeared, your operating system is hiding this browser's notifications. On Windows, check Settings → System → Notifications: your browser (Chrome, Brave, Edge…) must be on, and Do not disturb off."
         : "The browser refused to show a notification on this device.",
     )
   }
