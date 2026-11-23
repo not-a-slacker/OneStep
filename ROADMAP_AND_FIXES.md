@@ -39,8 +39,9 @@ locally in WSL. It has still never been run on a device.
 
 ### 0.1 XP fixes (November 2026)
 
-Found while tracing the point system end to end. Three are fixed; the other three
-are design decisions and wait on a choice about how strict the scoring should be.
+Found while tracing the point system end to end. All six are closed: four fixed,
+and the two abuse cases (S-10, S-11) accepted, because OneStep is a personal
+productivity tool with no leaderboard or shared ranking.
 
 | Item | Status | Where |
 |---|---|---|
@@ -48,9 +49,9 @@ are design decisions and wait on a choice about how strict the scoring should be
 | B-20 manual entries earn the session bonus | Done | `supabase/milestone_2_xp_fixes.sql`, `pomodoroStore.ts` |
 | B-2 manual entries shift the long-break cadence | Done | Closed alongside B-20 by the same flag |
 | B-22 editing a task moves its deadline | Done | `tasks/page.tsx` |
-| S-10 manual focus time is effectively unlimited | Open, needs a decision | — |
-| S-11 task and habit XP can be farmed | Open, needs a decision | — |
-| B-21 streak bonus is inconsistent | Open, needs a decision | — |
+| S-10 manual focus time is effectively unlimited | Accepted (personal use) | — |
+| S-11 task and habit XP can be farmed | Accepted (personal use) | — |
+| B-21 streak bonus is inconsistent | Done | `supabase/milestone_2_streak_bonus.sql` |
 
 **Apply `milestone_2_xp_fixes.sql` before deploying the matching web build.** The
 build writes `pomodoro_sessions.is_manual` and reads `profiles.task_xp`,
@@ -58,6 +59,10 @@ build writes `pomodoro_sessions.is_manual` and reads `profiles.task_xp`,
 and the per-source XP shows 0. The migration was executed against an in-memory
 PostgreSQL (PGlite) with the full schema: backfill, recalculation, re-running it,
 the column grants as a signed-in user, and a fresh install from `schema.sql`.
+
+`milestone_2_streak_bonus.sql` (B-21) has no client dependency and can be applied
+at any time after it. It was tested the same way (15 checks, including that no
+stored streak changes and that a user cannot read another user's streak runs).
 
 ---
 
@@ -197,7 +202,12 @@ re-implement the countdown with `AlarmManager.setExactAndAllowWhileIdle` plus a
 plain ongoing notification, which needs no foreground-service type at all and
 uses less battery.
 
-### S-10 · Manual focus time is effectively unlimited — **P1** · needs a decision
+### S-10 · Manual focus time is effectively unlimited — **P1** · ACCEPTED
+
+**Decision (November 2026):** not fixed. OneStep is built for the owner's own
+productivity, XP is a personal motivator, and there is no leaderboard, so there
+is nobody to cheat but yourself. Revisit before any shared ranking, social
+feature or public XP display ships; the options below still apply.
 
 S-2 capped one session at 1,440 minutes and made `duration` agree with
 `end_time - start_time`. But the client chooses both timestamps, and nothing
@@ -212,7 +222,10 @@ minutes per user per calendar day at 1,440; limit how far back a manual entry ma
 be dated; or award XP for timer sessions only. Overlap rejection plus a daily cap
 closes the hole without penalising honest catch-up logging.
 
-### S-11 · Task and habit XP can be farmed — **P2** · needs a decision
+### S-11 · Task and habit XP can be farmed — **P2** · ACCEPTED
+
+**Decision (November 2026):** not fixed, for the same reason as S-10. Revisit
+under the same conditions.
 
 A task is worth up to 100 XP the moment it is marked complete, however trivial,
 and any number can be created. Habit check-ins can be recorded for any past date
@@ -444,7 +457,7 @@ exactly `duration` minutes later, and `planned_duration = duration` — which ti
 sessions, timed to the millisecond, do not produce. This fixes the app's own form;
 it does not stop a crafted request (S-10).
 
-### B-21 · The streak bonus means different things for different habits — **P2** · needs a decision
+### B-21 · The streak bonus means different things for different habits — **P2** · DONE
 
 The bonus is `floor(longest_streak / 7) × 25` per habit. For a daily habit a
 streak is counted in days, for a weekly habit in weeks, so a weekly habit needs
@@ -456,6 +469,18 @@ earns nothing until it beats the old record.
 four; and pay per milestone reached in any run (store milestones earned, or
 derive them from all runs) instead of from the longest run alone. Deciding this
 also settles what `current_streak` should be worth, which today is nothing.
+
+**Done:** every run of a habit now pays 25 XP per milestone it reaches, and a
+milestone is 7 consecutive days for a daily habit or 4 consecutive successful
+weeks for a weekly or n-times-a-week habit
+([milestone_2_streak_bonus.sql](supabase/milestone_2_streak_bonus.sql)).
+Milestones are derived from the check-in history by `habit_streak_runs`, which
+`recalculate_habit_streaks` now also uses, so the streak columns and the bonus
+cannot disagree; removing a check-in takes its milestone back. A broken streak
+pays again as it is rebuilt, so `current_streak` needs no separate value.
+Four weeks rather than one keeps it a streak bonus: paying every successful week
+would be a flat weekly payment. A side effect is that `habits.longest_streak`,
+which a client can still set when inserting a habit, no longer affects XP.
 
 ### B-22 · Editing a task moves its deadline by the UTC offset — **P1** · DONE
 
@@ -540,7 +565,7 @@ B-15 (working CI), B-13 (delete confirmations).
 **Milestone 2 — Make it trustworthy (2–3 weeks)**
 Generated types, unit tests for the XP and streak logic, S-6 (SSR auth),
 S-7 (password reset), B-9/B-10/B-11 (fetch and pagination), B-12 (timezones),
-and a decision on S-10, S-11 and B-21 (how strict XP scoring should be).
+(S-10, S-11 and B-21 are settled).
 
 **Milestone 3 — Make it complete (3–4 weeks)**
 Settings sync to the database, theme and accessibility pass, task search and

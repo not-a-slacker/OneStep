@@ -104,6 +104,7 @@ default project per user.
 | `milestone_1_integrity.sql` | Legacy DBs | Server-owned habit streaks, habit-log ownership, default-project protection, focus-session limits |
 | `milestone_1_verification.sql` | Any | Read-only PASS/FAIL report on the above |
 | `milestone_2_xp_fixes.sql` | Legacy DBs | Per-source XP split on profiles, `is_manual` focus entries without the session bonus; ends with its own PASS/FAIL check |
+| `milestone_2_streak_bonus.sql` | Legacy DBs | Streak bonus per milestone in every run (7 days daily, 4 weeks weekly); ends with its own PASS/INFO check |
 
 ---
 
@@ -207,7 +208,9 @@ XP is calculated only in the database and the web app displays the stored
 figures, including the split by source (see `milestone_2_xp_fixes.sql`). The
 formula: 50 XP per task plus a priority bonus (0/15/30)
 plus 20 for beating a deadline; 1 XP per focus minute plus 10 per completed
-timer session (manual entries do not get the bonus); 30 XP per habit check-in plus 25 per seven days of longest streak;
+timer session (manual entries do not get the bonus); 30 XP per habit check-in plus
+25 per streak milestone reached in any run (every 7 days for a daily habit, every
+4 successful weeks for a weekly or n-times-a-week habit);
 level = `floor(sqrt(xp / 250)) + 1`.
 
 ### 4.10 State layer

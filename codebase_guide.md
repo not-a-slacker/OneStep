@@ -29,7 +29,8 @@ OneStep/
 │   ├── manual_focus_project_assignment.sql
 │   ├── milestone_1_integrity.sql
 │   ├── milestone_1_verification.sql
-│   └── milestone_2_xp_fixes.sql
+│   ├── milestone_2_xp_fixes.sql
+│   └── milestone_2_streak_bonus.sql
 └── web/
     ├── src/app/
     │   ├── (auth)/login/page.tsx
@@ -161,6 +162,7 @@ supabase/gamification_system.sql
 supabase/manual_focus_project_assignment.sql
 supabase/milestone_1_integrity.sql
 supabase/milestone_2_xp_fixes.sql
+supabase/milestone_2_streak_bonus.sql
 ```
 
 Then run `supabase/milestone_1_verification.sql` to confirm every protection is

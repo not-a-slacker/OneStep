@@ -65,6 +65,7 @@ For an existing OneStep database that already has the original schema and
 ../supabase/manual_focus_project_assignment.sql
 ../supabase/milestone_1_integrity.sql
 ../supabase/milestone_2_xp_fixes.sql
+../supabase/milestone_2_streak_bonus.sql
 ```
 
 Then confirm the result with `../supabase/milestone_1_verification.sql`, which
@@ -87,6 +88,7 @@ The migration adds:
 - Plausibility limits on focus-session durations and timestamps
 - The per-source XP split stored on profiles, and manual focus entries flagged
   so they do not earn the completed-session bonus
+- A streak bonus for every milestone in every run, not only the longest
 
 Apply the migrations before running the updated UI because the client expects
 the new behaviour. In particular, `milestone_1_integrity.sql` must be applied
