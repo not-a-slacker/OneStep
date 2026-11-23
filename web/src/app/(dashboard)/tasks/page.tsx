@@ -155,7 +155,9 @@ export default function TasksPage() {
     setEditingTask(task)
     setForm({
       title: task.title,
-      deadline: task.deadline ? new Date(task.deadline).toISOString().slice(0, 16) : "",
+      // datetime-local wants local wall-clock time. toISOString() gives UTC, so
+      // every edit-and-save used to move the deadline by the UTC offset (B-22).
+      deadline: task.deadline ? format(new Date(task.deadline), "yyyy-MM-dd'T'HH:mm") : "",
       projectId: task.project_id,
       priority: task.priority,
       estimatedTime: task.estimated_time?.toString() ?? "",

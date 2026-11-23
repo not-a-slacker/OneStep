@@ -16,6 +16,9 @@ export interface PomodoroSession {
   planned_duration: number
   start_time: string
   end_time: string
+  // True for entries logged by hand rather than recorded by the timer. Manual
+  // entries earn focus minutes but not the completed-session bonus (B-20).
+  is_manual: boolean
 }
 
 export interface ManualFocusSessionInput {
@@ -181,7 +184,9 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
       set({
         sessions,
         sessionsCompleted: sessions.filter((session) => (
-          session.planned_duration > 0 && session.duration >= session.planned_duration
+          !session.is_manual
+          && session.planned_duration > 0
+          && session.duration >= session.planned_duration
         )).length,
         loading: false,
         error: error?.message ?? null,
@@ -232,6 +237,8 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
           planned_duration: duration,
           start_time: start.toISOString(),
           end_time: end.toISOString(),
+          // Requires supabase/milestone_2_xp_fixes.sql.
+          is_manual: true,
         }])
         .select()
         .single()
@@ -245,7 +252,9 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
       set((state) => ({
         sessions: [session, ...state.sessions]
           .sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime()),
-        sessionsCompleted: state.sessionsCompleted + 1,
+        // sessionsCompleted is deliberately left alone: it drives the "long
+        // break after every fourth session" cadence, and logging past focus
+        // time should not shift it (B-2).
         error: null,
       }))
       await useAuthStore.getState().refreshProfile()

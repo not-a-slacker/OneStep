@@ -1,38 +1,23 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
 import { LogOut, Menu, User } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { useAuthStore } from "@/store/authStore"
-import { calculateGamification, levelProgress } from "@/lib/gamification"
-import { useTaskStore } from "@/store/taskStore"
-import { usePomodoroStore } from "@/store/pomodoroStore"
-import { useHabitStore } from "@/store/habitStore"
+import { experienceFromProfile, levelProgress } from "@/lib/gamification"
 
 export default function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
   const profile = useAuthStore((state) => state.profile)
-  const { tasks, fetchTasks } = useTaskStore()
-  const { sessions, fetchSessions } = usePomodoroStore()
-  const { habits, logs, fetchHabits } = useHabitStore()
-  const [progressReady, setProgressReady] = useState(false)
 
-  useEffect(() => {
-    let active = true
-    void Promise.all([fetchTasks(), fetchSessions(), fetchHabits()]).finally(() => {
-      if (active) setProgressReady(true)
-    })
-    return () => { active = false }
-  }, [fetchHabits, fetchSessions, fetchTasks])
-
-  const gamification = useMemo(
-    () => calculateGamification(tasks, sessions, habits, logs),
-    [habits, logs, sessions, tasks],
-  )
-  const experience = gamification.totalExperience
-  const progress = levelProgress(experience)
+  // XP comes from the server-maintained profile (ROADMAP B-19). The header no
+  // longer loads every task, session and habit just to recompute it.
+  const experience = experienceFromProfile(profile)
+  const progressReady = experience !== null
+  const progress = levelProgress(experience?.total ?? 0)
   const level = progress.level
   const displayName = profile?.username?.trim() || "User"
-  const progressDescription = `${experience} lifetime XP: ${gamification.tasks.experience} from tasks, ${gamification.focus.experience} from focus, and ${gamification.habits.experience} from habits`
+  const progressDescription = experience
+    ? `${experience.total} lifetime XP: ${experience.tasks} from tasks, ${experience.focus} from focus, and ${experience.habits} from habits`
+    : ""
 
   return (
     <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-[var(--surface-border)] bg-[var(--surface)]/90 px-4 backdrop-blur-xl sm:px-6">

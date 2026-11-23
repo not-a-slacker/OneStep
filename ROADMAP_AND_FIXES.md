@@ -17,8 +17,8 @@ symptom, where it lives, and the suggested fix. Severity legend:
 
 ## 0. Milestone 1 status
 
-Milestone 1 is implemented on the `milestone-1-hardening` branch. Items marked
-**Done** below are closed by that work.
+Milestone 1 is merged into `main` and its SQL has been applied in the Supabase
+SQL editor. Items marked **Done** below are closed by that work.
 
 | Item | Status | Where |
 |---|---|---|
@@ -33,14 +33,31 @@ Milestone 1 is implemented on the `milestone-1-hardening` branch. Items marked
 | B-15 CI cannot build | Done | `.github/workflows/quality.yml`, `lib/supabase.ts` |
 | B-16 modal accessibility | Partial | New `ConfirmDialog` traps focus; the task/habit/settings modals still do not |
 
-**The SQL has not been executed.** There is no local PostgreSQL, Docker, or
-Supabase CLI in this environment, so `milestone_1_integrity.sql` was written and
-reviewed but never run. Apply it in the Supabase SQL editor and then run
-`milestone_1_verification.sql`, which reports PASS/FAIL per protection.
+Since then the Android module has been made to build: CI compiles it, runs its
+unit tests and lint, and assembles a debug APK, and the same command now runs
+locally in WSL. It has still never been run on a device.
 
-**Apply the SQL and the client together.** The client no longer writes habit
-streak columns and the migration revokes the client's permission to do so.
-Deploying one without the other breaks habit check-ins.
+### 0.1 XP fixes (November 2026)
+
+Found while tracing the point system end to end. Three are fixed; the other three
+are design decisions and wait on a choice about how strict the scoring should be.
+
+| Item | Status | Where |
+|---|---|---|
+| B-19 displayed XP is not the server's | Done | `supabase/milestone_2_xp_fixes.sql`, `lib/gamification.ts`, `Header.tsx`, dashboard |
+| B-20 manual entries earn the session bonus | Done | `supabase/milestone_2_xp_fixes.sql`, `pomodoroStore.ts` |
+| B-2 manual entries shift the long-break cadence | Done | Closed alongside B-20 by the same flag |
+| B-22 editing a task moves its deadline | Done | `tasks/page.tsx` |
+| S-10 manual focus time is effectively unlimited | Open, needs a decision | — |
+| S-11 task and habit XP can be farmed | Open, needs a decision | — |
+| B-21 streak bonus is inconsistent | Open, needs a decision | — |
+
+**Apply `milestone_2_xp_fixes.sql` before deploying the matching web build.** The
+build writes `pomodoro_sessions.is_manual` and reads `profiles.task_xp`,
+`focus_xp` and `habit_xp`. Until the SQL runs, manual focus entries are rejected
+and the per-source XP shows 0. The migration was executed against an in-memory
+PostgreSQL (PGlite) with the full schema: backfill, recalculation, re-running it,
+the column grants as a signed-in user, and a fresh install from `schema.sql`.
 
 ---
 
@@ -180,6 +197,34 @@ re-implement the countdown with `AlarmManager.setExactAndAllowWhileIdle` plus a
 plain ongoing notification, which needs no foreground-service type at all and
 uses less battery.
 
+### S-10 · Manual focus time is effectively unlimited — **P1** · needs a decision
+
+S-2 capped one session at 1,440 minutes and made `duration` agree with
+`end_time - start_time`. But the client chooses both timestamps, and nothing
+stops sessions from overlapping or being backdated, so anyone can log any number
+of 24-hour sessions at 1 XP per minute, through the normal manual-entry form.
+The `is_manual` flag from B-20 is reported by the client, so a hand-crafted
+request can also claim a manual entry came from the timer.
+
+**Options:** reject sessions that overlap another session of the same user (an
+exclusion constraint on `tstzrange(start_time, end_time)`); cap total focus
+minutes per user per calendar day at 1,440; limit how far back a manual entry may
+be dated; or award XP for timer sessions only. Overlap rejection plus a daily cap
+closes the hole without penalising honest catch-up logging.
+
+### S-11 · Task and habit XP can be farmed — **P2** · needs a decision
+
+A task is worth up to 100 XP the moment it is marked complete, however trivial,
+and any number can be created. Habit check-ins can be recorded for any past date
+(only dates after tomorrow are rejected), at 30 XP each plus the streak bonus
+that a backfilled run produces. Neither needs a crafted request.
+
+**Options:** a daily XP cap per source; no XP for a task completed within a few
+minutes of being created; no XP for check-ins dated more than one or two days
+back (they would still count towards streaks and history); or accept it, on the
+basis that XP is a personal motivator with no leaderboard. If a leaderboard or
+any shared ranking is ever planned, this has to be closed first.
+
 ---
 
 ## 2. Bugs
@@ -200,7 +245,10 @@ SPA. **Fix (proper):** run the countdown in a Web Worker or a Service Worker so
 it also survives background-tab throttling, and finalise the session from a
 `visibilitychange` / `beforeunload` handler.
 
-### B-2 · Manual focus entries inflate the long-break counter — **P1**
+### B-2 · Manual focus entries inflate the long-break counter — **P1** · DONE
+
+Closed alongside B-20: manual entries no longer increment `sessionsCompleted`,
+and entries flagged `is_manual` are excluded when it is recounted on load.
 
 `addManualSession` does `sessionsCompleted: state.sessionsCompleted + 1`
 ([pomodoroStore.ts:191](web/src/store/pomodoroStore.ts:191)) regardless of
@@ -368,6 +416,59 @@ no controls.
 **Fix:** start the timer from the permission callback, and show a rationale plus
 a settings shortcut on denial.
 
+### B-19 · The web app displays XP it computed itself, not the server's — **P1** · DONE
+
+`profiles.experience_points` is calculated by the database, but the header and
+dashboard ignored it and recomputed XP in the browser with a TypeScript copy of
+the formula in [gamification.ts](web/src/lib/gamification.ts). The two agreed
+only as long as both copies were edited together; any change to one would have
+shown users a number different from the one stored. The header also loaded every
+task, session and habit on every page just to do this.
+
+**Done:** the recalculation function now also stores the split
+(`task_xp`, `focus_xp`, `habit_xp`) on `profiles`, and the client reads every XP
+figure from the profile. The dashboard reloads the profile on visit, so XP earned
+on Android shows up. Only the level curve is still repeated in TypeScript, to
+draw the progress bar; it must stay in step with the SQL.
+
+### B-20 · Manual focus entries always earn the completed-session bonus — **P1** · DONE
+
+The +10 bonus is for a session where `duration >= planned_duration`. The manual
+entry form sets `planned_duration = duration`, so every manual entry qualified,
+and a one-minute entry was worth 11 XP — the cheapest way to farm points.
+
+**Done:** `pomodoro_sessions.is_manual` (default `false`) marks hand-logged
+entries, the web form sets it, and the formula skips the bonus for them. Existing
+manual entries were identified by their shape — whole-minute start, `end_time`
+exactly `duration` minutes later, and `planned_duration = duration` — which timer
+sessions, timed to the millisecond, do not produce. This fixes the app's own form;
+it does not stop a crafted request (S-10).
+
+### B-21 · The streak bonus means different things for different habits — **P2** · needs a decision
+
+The bonus is `floor(longest_streak / 7) × 25` per habit. For a daily habit a
+streak is counted in days, for a weekly habit in weeks, so a weekly habit needs
+seven weeks of streak for the bonus a daily habit earns in seven days. And
+because only the single longest run counts, rebuilding a streak after breaking it
+earns nothing until it beats the old record.
+
+**Options:** count weekly streaks in weeks but pay the bonus every week, or every
+four; and pay per milestone reached in any run (store milestones earned, or
+derive them from all runs) instead of from the longest run alone. Deciding this
+also settles what `current_streak` should be worth, which today is nothing.
+
+### B-22 · Editing a task moves its deadline by the UTC offset — **P1** · DONE
+
+The edit form filled the `datetime-local` input with
+`new Date(deadline).toISOString().slice(0, 16)` — UTC wall-clock time — and the
+browser read it back as local time on save. In India every edit-and-save moved
+the deadline 5½ hours earlier, which could also cost the +20 on-time bonus.
+
+**Done:** the form now formats the deadline in local time
+([tasks/page.tsx:160](web/src/app/(dashboard)/tasks/page.tsx:160)). Deadlines
+already shifted by earlier edits cannot be detected and stay as saved. The wider
+timezone work is B-12.
+
 ---
 
 ## 3. Improvements
@@ -438,7 +539,8 @@ B-15 (working CI), B-13 (delete confirmations).
 
 **Milestone 2 — Make it trustworthy (2–3 weeks)**
 Generated types, unit tests for the XP and streak logic, S-6 (SSR auth),
-S-7 (password reset), B-9/B-10/B-11 (fetch and pagination), B-12 (timezones).
+S-7 (password reset), B-9/B-10/B-11 (fetch and pagination), B-12 (timezones),
+and a decision on S-10, S-11 and B-21 (how strict XP scoring should be).
 
 **Milestone 3 — Make it complete (3–4 weeks)**
 Settings sync to the database, theme and accessibility pass, task search and

@@ -7,6 +7,11 @@ export interface Profile {
   username: string | null
   level: number
   experience_points: number
+  // Per-source split of experience_points, written by the server
+  // (supabase/milestone_2_xp_fixes.sql).
+  task_xp: number
+  focus_xp: number
+  habit_xp: number
   avatar_url: string | null
   created_at: string
 }

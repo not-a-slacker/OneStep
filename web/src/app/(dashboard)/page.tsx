@@ -7,19 +7,23 @@ import { usePomodoroStore } from '@/store/pomodoroStore';
 import { useHabitStore } from '@/store/habitStore';
 import { useAuthStore } from '@/store/authStore';
 import { format, isToday, isPast } from 'date-fns';
-import { calculateGamification, levelProgress } from '@/lib/gamification';
+import { experienceFromProfile, levelProgress, summarizeActivity } from '@/lib/gamification';
 
 export default function Home() {
   const { tasks, fetchTasks, updateTaskStatus } = useTaskStore();
   const { sessions, fetchSessions } = usePomodoroStore();
   const { habits, logs, fetchHabits, checkInHabit } = useHabitStore();
   const profile = useAuthStore((state) => state.profile);
+  const refreshProfile = useAuthStore((state) => state.refreshProfile);
 
   useEffect(() => {
     fetchTasks();
     fetchSessions();
     fetchHabits();
-  }, [fetchTasks, fetchSessions, fetchHabits]);
+    // XP is read from the profile, so reload it too in case it changed elsewhere
+    // (for example on the Android app) since sign-in.
+    void refreshProfile();
+  }, [fetchTasks, fetchSessions, fetchHabits, refreshProfile]);
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
 
@@ -65,11 +69,14 @@ export default function Home() {
       .slice(0, 5); // top 5
   }, [tasks]);
 
-  const gamification = useMemo(
-    () => calculateGamification(tasks, sessions, habits, logs),
+  const activity = useMemo(
+    () => summarizeActivity(tasks, sessions, habits, logs),
     [habits, logs, sessions, tasks],
   );
-  const gamificationProgress = levelProgress(gamification.totalExperience);
+  // Every XP figure below is the server's (ROADMAP B-19).
+  const experience = experienceFromProfile(profile);
+  const totalExperience = experience?.total ?? 0;
+  const gamificationProgress = levelProgress(totalExperience);
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12">
@@ -110,13 +117,13 @@ export default function Home() {
               <div className="rounded-xl bg-amber-500/15 p-3 text-amber-400"><Trophy size={25} /></div>
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-400">Productivity level</p>
-                <h2 id="gamification-heading" className="text-2xl font-black">Level {gamification.level}</h2>
+                <h2 id="gamification-heading" className="text-2xl font-black">Level {gamificationProgress.level}</h2>
               </div>
             </div>
             <div className="mt-5">
               <div className="mb-2 flex items-center justify-between gap-4 text-sm">
-                <span className="font-semibold text-zinc-300">{gamificationProgress.earnedThisLevel} of {gamificationProgress.neededThisLevel} XP to Level {gamification.level + 1}</span>
-                <span className="shrink-0 text-zinc-500">{gamification.totalExperience} lifetime XP</span>
+                <span className="font-semibold text-zinc-300">{gamificationProgress.earnedThisLevel} of {gamificationProgress.neededThisLevel} XP to Level {gamificationProgress.level + 1}</span>
+                <span className="shrink-0 text-zinc-500">{totalExperience} lifetime XP</span>
               </div>
               <div className="h-3 overflow-hidden rounded-full bg-zinc-800">
                 <div className="h-full rounded-full bg-gradient-to-r from-amber-400 via-[var(--color-primary)] to-[var(--color-success)] transition-all" style={{ width: `${gamificationProgress.percentage}%` }} />
@@ -126,9 +133,9 @@ export default function Home() {
 
           <div className="grid shrink-0 gap-3 sm:grid-cols-3">
             {[
-              { label: 'Tasks', xp: gamification.tasks.experience, detail: `${gamification.tasks.completed} completed`, icon: CheckCircle, color: 'text-emerald-400 bg-emerald-500/10' },
-              { label: 'Focus', xp: gamification.focus.experience, detail: `${gamification.focus.minutes} minutes`, icon: Target, color: 'text-blue-400 bg-blue-500/10' },
-              { label: 'Habits', xp: gamification.habits.experience, detail: `${gamification.habits.checkIns} check-ins`, icon: Flame, color: 'text-orange-400 bg-orange-500/10' },
+              { label: 'Tasks', xp: experience?.tasks ?? 0, detail: `${activity.tasksCompleted} completed`, icon: CheckCircle, color: 'text-emerald-400 bg-emerald-500/10' },
+              { label: 'Focus', xp: experience?.focus ?? 0, detail: `${activity.focusMinutes} minutes`, icon: Target, color: 'text-blue-400 bg-blue-500/10' },
+              { label: 'Habits', xp: experience?.habits ?? 0, detail: `${activity.habitCheckIns} check-ins`, icon: Flame, color: 'text-orange-400 bg-orange-500/10' },
             ].map((source) => (
               <div key={source.label} className="min-w-36 rounded-xl border border-[var(--surface-border)] bg-zinc-950/40 p-4">
                 <div className={`mb-3 w-fit rounded-lg p-2 ${source.color}`}><source.icon size={18} /></div>
@@ -143,10 +150,10 @@ export default function Home() {
         <div className="mt-7 border-t border-[var(--surface-border)] pt-6">
           <div className="mb-4 flex items-center justify-between gap-4">
             <h3 className="flex items-center gap-2 font-bold"><Medal size={18} className="text-amber-400" />Achievements</h3>
-            <span className="text-xs text-zinc-500">{gamification.achievements.filter((achievement) => achievement.unlocked).length}/{gamification.achievements.length} unlocked</span>
+            <span className="text-xs text-zinc-500">{activity.achievements.filter((achievement) => achievement.unlocked).length}/{activity.achievements.length} unlocked</span>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {gamification.achievements.map((achievement) => {
+            {activity.achievements.map((achievement) => {
               const completion = Math.min(100, (achievement.progress / achievement.target) * 100);
               return (
                 <article key={achievement.id} className={`rounded-xl border p-4 ${achievement.unlocked ? 'border-amber-500/30 bg-amber-500/5' : 'border-[var(--surface-border)] bg-zinc-950/30'}`}>

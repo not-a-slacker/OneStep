@@ -103,6 +103,7 @@ default project per user.
 | `manual_focus_project_assignment.sql` | Legacy DBs | Direct project assignment for taskless focus |
 | `milestone_1_integrity.sql` | Legacy DBs | Server-owned habit streaks, habit-log ownership, default-project protection, focus-session limits |
 | `milestone_1_verification.sql` | Any | Read-only PASS/FAIL report on the above |
+| `milestone_2_xp_fixes.sql` | Legacy DBs | Per-source XP split on profiles, `is_manual` focus entries without the session bonus; ends with its own PASS/FAIL check |
 
 ---
 

@@ -64,6 +64,7 @@ For an existing OneStep database that already has the original schema and
 ../supabase/gamification_system.sql
 ../supabase/manual_focus_project_assignment.sql
 ../supabase/milestone_1_integrity.sql
+../supabase/milestone_2_xp_fixes.sql
 ```
 
 Then confirm the result with `../supabase/milestone_1_verification.sql`, which
@@ -84,11 +85,15 @@ The migration adds:
 - Ownership validation on habit check-ins
 - A protected default-project flag that clients cannot clear
 - Plausibility limits on focus-session durations and timestamps
+- The per-source XP split stored on profiles, and manual focus entries flagged
+  so they do not earn the completed-session bonus
 
 Apply the migrations before running the updated UI because the client expects
 the new behaviour. In particular, `milestone_1_integrity.sql` must be applied
 together with this release: the client no longer writes habit streaks, and the
-database no longer permits it.
+database no longer permits it. Likewise `milestone_2_xp_fixes.sql` must be
+applied before this release is deployed: the client writes `is_manual` and reads
+the per-source XP columns.
 
 ## Quality checks
 
