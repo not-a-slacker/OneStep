@@ -169,8 +169,12 @@ task-linked Pomodoro minutes) and *tasks created vs focus minutes* over 14 days.
   unassigned under `Misc.`.
 - A DB row is inserted at start with `duration = 0`; pause and reset write the
   elapsed whole minutes; normal completion writes the full planned duration.
-- WebAudio three-tone alarm (unlocked on the user's click) plus a `Notification`
-  API completion notice and an in-page banner.
+- The countdown runs in the dashboard shell, so it keeps going on every route,
+  and ticks from a Web Worker so a background tab still finishes on time.
+- When a period ends, a WebAudio chime repeats for 2½ minutes, a system
+  notification stays on screen until clicked, and a banner with **Stop alarm**
+  appears on whichever page is open. Starting the next period, resetting, or
+  clicking the notification also silences it.
 - Long break automatically after every fourth completed focus session.
 - **Manual focus entry** — log time after the fact against a task *or* directly
   against a project, with start time and duration.
@@ -199,10 +203,11 @@ completion rates.
 
 ### 4.9 Gamification
 
-[gamification.ts](web/src/lib/gamification.ts) mirrors the SQL formula exactly so
-the UI and the database agree: 50 XP per task plus a priority bonus (0/15/30)
+XP is calculated only in the database and the web app displays the stored
+figures, including the split by source (see `milestone_2_xp_fixes.sql`). The
+formula: 50 XP per task plus a priority bonus (0/15/30)
 plus 20 for beating a deadline; 1 XP per focus minute plus 10 per completed
-session; 30 XP per habit check-in plus 25 per seven days of longest streak;
+timer session (manual entries do not get the bonus); 30 XP per habit check-in plus 25 per seven days of longest streak;
 level = `floor(sqrt(xp / 250)) + 1`.
 
 ### 4.10 State layer
@@ -285,7 +290,7 @@ entry, gamification display, widgets, and any UI or instrumentation tests.
 | Session persistence | Yes | Yes |
 | Pomodoro timer with DB-backed sessions | Yes | Yes |
 | Timer survives app/tab restart | Yes (localStorage) | Yes (DataStore) |
-| Timer runs while the UI is not visible | **No** | Yes (foreground service) |
+| Timer runs while the UI is not visible | While any dashboard tab is open | Yes (foreground service) |
 | Task selection for focus | Yes | Yes (read-only list) |
 | Manual focus entry | Yes | No |
 | Task CRUD | Yes | No |

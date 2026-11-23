@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react"
 import Sidebar from "@/components/layout/Sidebar"
 import Header from "@/components/layout/Header"
+import TimerAlarmBanner from "@/components/timer/TimerAlarmBanner"
+import { unlockAlarmOnFirstInteraction } from "@/lib/alarm"
 import { usePomodoroStore } from "@/store/pomodoroStore"
 
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
@@ -15,6 +17,10 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   useEffect(() => {
     hydrateTimer()
   }, [hydrateTimer])
+
+  // A timer restored after a reload was never started by a click, so audio is
+  // still locked; unlock it on the first interaction so its alarm can sound.
+  useEffect(() => unlockAlarmOnFirstInteraction(), [])
 
   return (
     <div className="flex min-h-screen">
@@ -31,6 +37,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         <Header onOpenMenu={() => setSidebarOpen(true)} />
         <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
       </div>
+      <TimerAlarmBanner />
     </div>
   )
 }

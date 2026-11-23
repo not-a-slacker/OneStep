@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { supabase } from '@/lib/supabase'
-import { notifyPeriodComplete, playAlarm } from '@/lib/alarm'
+import { notifyPeriodComplete, playAlarm, stopAlarm } from '@/lib/alarm'
+import { startTicker } from '@/lib/ticker'
 import { useProjectStore } from '@/store/projectStore'
 import { useTaskStore } from '@/store/taskStore'
 import { useAuthStore } from '@/store/authStore'
@@ -61,6 +62,7 @@ interface PomodoroState {
   currentSessionDbId: string | null
   targetEndTime: number | null
   periodMessage: string | null
+  alarmRinging: boolean
   fetchSessions: () => Promise<void>
   addManualSession: (input: ManualFocusSessionInput) => Promise<boolean>
   hydrateTimer: () => void
@@ -73,11 +75,11 @@ interface PomodoroState {
   tick: () => void
   completeSession: () => Promise<PomodoroMode>
   clearError: () => void
+  /** Silences the alarm and hides the completion message. */
   dismissPeriodMessage: () => void
 }
 
 const TIMER_STORAGE_KEY = 'onestep-pomodoro-timer-v2'
-const PERIOD_MESSAGE_TIMEOUT = 8000
 
 /**
  * The countdown lives at module scope so it keeps running while the user
@@ -85,8 +87,7 @@ const PERIOD_MESSAGE_TIMEOUT = 8000
  * component, so leaving the page stopped the clock, the alarm, and the write
  * that records the session's duration (ROADMAP B-1).
  */
-let tickHandle: number | null = null
-let messageHandle: number | null = null
+let stopTicker: (() => void) | null = null
 let completionInProgress = false
 
 function persistTimer(state: PomodoroState) {
@@ -116,25 +117,28 @@ function clearPersistedTimer() {
 
 export const usePomodoroStore = create<PomodoroState>((set, get) => {
   const stopTicking = () => {
-    if (tickHandle !== null) {
-      window.clearInterval(tickHandle)
-      tickHandle = null
-    }
+    stopTicker?.()
+    stopTicker = null
   }
 
   const startTicking = () => {
-    if (typeof window === 'undefined' || tickHandle !== null) return
-    tickHandle = window.setInterval(() => get().tick(), 1000)
+    if (typeof window === 'undefined' || stopTicker) return
+    stopTicker = startTicker(() => get().tick())
   }
 
-  const showPeriodMessage = (message: string) => {
-    if (typeof window === 'undefined') return
-    if (messageHandle !== null) window.clearTimeout(messageHandle)
-    set({ periodMessage: message })
-    messageHandle = window.setTimeout(() => {
-      set({ periodMessage: null })
-      messageHandle = null
-    }, PERIOD_MESSAGE_TIMEOUT)
+  // The completion message stays up until dismissed or the next period starts,
+  // so someone returning after the alarm has stopped still sees what happened.
+  const announceCompletion = (completedMode: PomodoroMode) => {
+    const message = notifyPeriodComplete(completedMode, () => get().dismissPeriodMessage())
+    set({ periodMessage: message, alarmRinging: true })
+    void playAlarm(() => set({ alarmRinging: false })).then((started) => {
+      if (!started) set({ alarmRinging: false })
+    })
+  }
+
+  const silence = () => {
+    stopAlarm()
+    set({ periodMessage: null, alarmRinging: false })
   }
 
   return {
@@ -155,16 +159,11 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
     currentSessionDbId: null,
     targetEndTime: null,
     periodMessage: null,
+    alarmRinging: false,
 
     clearError: () => set({ error: null }),
 
-    dismissPeriodMessage: () => {
-      if (typeof window !== 'undefined' && messageHandle !== null) {
-        window.clearTimeout(messageHandle)
-        messageHandle = null
-      }
-      set({ periodMessage: null })
-    },
+    dismissPeriodMessage: () => silence(),
 
     fetchSessions: async () => {
       set({ loading: true, error: null })
@@ -309,6 +308,7 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
 
     setMode: (mode) => {
       stopTicking()
+      silence()
       set((state) => ({
         mode,
         isActive: false,
@@ -336,6 +336,7 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
     },
 
     startTimer: async () => {
+      silence()
       const state = get()
       let projectId = state.currentProjectId
       let taskId = state.currentTaskId
@@ -430,6 +431,7 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
     resetTimer: async () => {
       const state = get()
       stopTicking()
+      silence()
       if (state.mode === 'focus' && state.currentSessionDbId) {
         const spentSeconds = Math.max(0, state.focusDuration - state.timeRemaining)
         await supabase
@@ -481,6 +483,11 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
       stopTicking()
       set({ isActive: false, targetEndTime: null })
 
+      // Alarm and notification are fired from the store, not the page, so they
+      // still reach the user when the period ends on another route. They go
+      // first so a slow network write cannot delay them.
+      announceCompletion(completedMode)
+
       try {
         if (completedMode === 'focus' && state.currentSessionDbId) {
           const durationMinutes = Math.max(1, Math.ceil(state.focusDuration / 60))
@@ -522,11 +529,6 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
             startTime: null,
           })
         }
-
-        // Alarm and notification are fired from the store, not the page, so they
-        // still reach the user when the period ends on another route.
-        void playAlarm()
-        showPeriodMessage(notifyPeriodComplete(completedMode))
 
         persistTimer(get())
         return completedMode

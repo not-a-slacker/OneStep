@@ -14,10 +14,9 @@ import {
   PlusCircle,
   RotateCcw,
   Settings2,
-  Volume2,
 } from "lucide-react"
 import { format } from "date-fns"
-import { requestNotificationPermission, unlockAlarm } from "@/lib/alarm"
+import { notificationPermission, requestNotificationPermission, unlockAlarm } from "@/lib/alarm"
 import { usePomodoroStore } from "@/store/pomodoroStore"
 import { useProjectStore } from "@/store/projectStore"
 import { useTaskStore } from "@/store/taskStore"
@@ -36,7 +35,6 @@ export default function PomodoroPage() {
     shortBreakDuration,
     longBreakDuration,
     error,
-    periodMessage,
     setMode,
     startTimer,
     pauseTimer,
@@ -52,6 +50,9 @@ export default function PomodoroPage() {
   const { tasks, fetchTasks } = useTaskStore()
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  // Read after Start is pressed, not on render, so the server and client
+  // render the same markup.
+  const [notificationsBlocked, setNotificationsBlocked] = useState(false)
   const [isManualEntryOpen, setIsManualEntryOpen] = useState(false)
   const [manualAssignmentType, setManualAssignmentType] = useState<"task" | "project">("task")
   const [manualTaskId, setManualTaskId] = useState("")
@@ -75,6 +76,7 @@ export default function PomodoroPage() {
     // AudioContext and grant notification permission from a real interaction.
     await unlockAlarm()
     await requestNotificationPermission()
+    setNotificationsBlocked(notificationPermission() === "denied")
     await startTimer()
   }
 
@@ -169,17 +171,27 @@ export default function PomodoroPage() {
         </div>
       </div>
 
-      {(error || periodMessage) && (
+      {error && (
         <div
           role="status"
-          className={`mb-6 flex w-full items-center gap-3 rounded-xl border p-4 ${
-            error
-              ? "border-red-500/40 bg-red-500/10 text-red-200"
-              : "border-emerald-500/40 bg-emerald-500/10 text-emerald-100"
-          }`}
+          className="mb-6 flex w-full items-center gap-3 rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-red-200"
         >
-          {error ? <BellRing size={18} /> : <Volume2 size={18} />}
-          <span>{error ?? periodMessage}</span>
+          <BellRing size={18} />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {notificationsBlocked && (
+        <div
+          role="status"
+          className="mb-6 flex w-full items-center gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-100"
+        >
+          <BellRing size={18} className="shrink-0" />
+          <span>
+            Notifications are blocked for this site, so when a period ends you will hear
+            the alarm but see nothing outside this tab. Allow notifications from the icon
+            at the left of the address bar to be alerted in other tabs and apps.
+          </span>
         </div>
       )}
 
