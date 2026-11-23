@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useReducer, useState, useSyncExternalStore } from "react"
 import {
+  BellOff,
   BellRing,
   BrainCircuit,
   ChevronDown,
@@ -16,7 +17,13 @@ import {
   Settings2,
 } from "lucide-react"
 import { format } from "date-fns"
-import { notificationPermission, requestNotificationPermission, unlockAlarm } from "@/lib/alarm"
+import {
+  notificationPermission,
+  requestNotificationPermission,
+  sendTestNotification,
+  subscribeNotificationPermission,
+  unlockAlarm,
+} from "@/lib/alarm"
 import { usePomodoroStore } from "@/store/pomodoroStore"
 import { useProjectStore } from "@/store/projectStore"
 import { useTaskStore } from "@/store/taskStore"
@@ -50,9 +57,17 @@ export default function PomodoroPage() {
   const { tasks, fetchTasks } = useTaskStore()
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  // Read after Start is pressed, not on render, so the server and client
-  // render the same markup.
-  const [notificationsBlocked, setNotificationsBlocked] = useState(false)
+  // The server snapshot is "unsupported" so the first render matches the
+  // server markup; the real permission appears straight after hydration.
+  const permission = useSyncExternalStore(
+    subscribeNotificationPermission,
+    notificationPermission,
+    () => "unsupported" as const,
+  )
+  // Not every browser fires a permission change event after the prompt, so
+  // re-render once it resolves to pick up the new value.
+  const [, rerender] = useReducer((count: number) => count + 1, 0)
+  const [testNotificationResult, setTestNotificationResult] = useState<string | null>(null)
   const [isManualEntryOpen, setIsManualEntryOpen] = useState(false)
   const [manualAssignmentType, setManualAssignmentType] = useState<"task" | "project">("task")
   const [manualTaskId, setManualTaskId] = useState("")
@@ -76,8 +91,21 @@ export default function PomodoroPage() {
     // AudioContext and grant notification permission from a real interaction.
     await unlockAlarm()
     await requestNotificationPermission()
-    setNotificationsBlocked(notificationPermission() === "denied")
+    rerender()
     await startTimer()
+  }
+
+  const enableNotifications = async () => {
+    await requestNotificationPermission()
+    rerender()
+  }
+
+  const testNotification = () => {
+    setTestNotificationResult(
+      sendTestNotification()
+        ? "Sent. If no popup appeared, Windows is hiding Chrome's notifications: check Settings → System → Notifications (Chrome must be on, and Do not disturb off)."
+        : "The browser refused to show a notification on this device.",
+    )
   }
 
   const openSettings = () => {
@@ -181,17 +209,55 @@ export default function PomodoroPage() {
         </div>
       )}
 
-      {notificationsBlocked && (
+      {permission === "default" && (
+        <div
+          role="status"
+          className="mb-6 flex w-full flex-wrap items-center gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-100"
+        >
+          <BellOff size={18} className="shrink-0" />
+          <span className="min-w-0 flex-1">
+            Desktop notifications are off, so a finished period only shows in this tab.
+            If no prompt appears, click the icon at the left of the address bar and allow
+            notifications.
+          </span>
+          <button
+            type="button"
+            onClick={() => void enableNotifications()}
+            className="shrink-0 rounded-lg bg-amber-400 px-3 py-1.5 font-bold text-zinc-950 hover:bg-amber-300"
+          >
+            Turn on
+          </button>
+        </div>
+      )}
+
+      {permission === "denied" && (
         <div
           role="status"
           className="mb-6 flex w-full items-center gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-100"
         >
-          <BellRing size={18} className="shrink-0" />
+          <BellOff size={18} className="shrink-0" />
           <span>
             Notifications are blocked for this site, so when a period ends you will hear
             the alarm but see nothing outside this tab. Allow notifications from the icon
             at the left of the address bar to be alerted in other tabs and apps.
           </span>
+        </div>
+      )}
+
+      {permission === "granted" && (
+        <div role="status" className="mb-6 w-full text-sm text-zinc-400">
+          <div className="flex flex-wrap items-center gap-2">
+            <BellRing size={16} className="shrink-0 text-emerald-400" />
+            <span>Desktop notifications are on.</span>
+            <button
+              type="button"
+              onClick={testNotification}
+              className="rounded-md px-2 py-1 font-semibold text-emerald-300 underline-offset-2 hover:underline"
+            >
+              Send a test notification
+            </button>
+          </div>
+          {testNotificationResult && <p className="mt-1 text-xs text-zinc-500">{testNotificationResult}</p>}
         </div>
       )}
 

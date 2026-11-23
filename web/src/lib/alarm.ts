@@ -182,3 +182,50 @@ export function notificationPermission(): NotificationPermission | 'unsupported'
   if (typeof window === 'undefined' || !('Notification' in window)) return 'unsupported'
   return Notification.permission
 }
+
+/**
+ * Calls onChange whenever the site's notification permission changes, including
+ * when the user changes it from the address bar, so the page can show the
+ * current state without polling. A no-op where the Permissions API is missing.
+ */
+export function subscribeNotificationPermission(onChange: () => void): () => void {
+  if (typeof navigator === 'undefined' || !navigator.permissions?.query) return () => undefined
+  let status: PermissionStatus | null = null
+  let cancelled = false
+  navigator.permissions
+    .query({ name: 'notifications' })
+    .then((result) => {
+      if (cancelled) return
+      status = result
+      result.addEventListener('change', onChange)
+    })
+    .catch(() => undefined)
+  return () => {
+    cancelled = true
+    status?.removeEventListener('change', onChange)
+  }
+}
+
+/**
+ * Shows a throwaway notification so the user can tell whether the browser or
+ * the operating system is holding notifications back: if permission is granted
+ * and this does not appear, the cause is outside the browser (for example
+ * Windows notification settings or Do not disturb).
+ */
+export function sendTestNotification(): boolean {
+  if (notificationPermission() !== 'granted') return false
+  try {
+    const shown = new Notification('OneStep test notification', {
+      body: 'If you can see this, timer alerts will reach you in other tabs and apps.',
+      icon: '/favicon.ico',
+      tag: 'onestep-test',
+    })
+    shown.onclick = () => {
+      window.focus()
+      shown.close()
+    }
+    return true
+  } catch {
+    return false
+  }
+}
