@@ -10,6 +10,7 @@ import {
   FolderKanban,
   History,
   ListTodo,
+  NotebookPen,
   Pause,
   Play,
   PlusCircle,
@@ -24,6 +25,8 @@ import {
   subscribeNotificationPermission,
   unlockAlarm,
 } from "@/lib/alarm"
+import SessionProgressDialog from "@/components/timer/SessionProgressDialog"
+import { progressBefore } from "@/lib/taskProgress"
 import { usePomodoroStore } from "@/store/pomodoroStore"
 import { useProjectStore } from "@/store/projectStore"
 import { useTaskStore } from "@/store/taskStore"
@@ -78,6 +81,8 @@ export default function PomodoroPage() {
   const [shortInput, setShortInput] = useState("5")
   const [longInput, setLongInput] = useState("15")
   const [visibleHistoryCount, setVisibleHistoryCount] = useState(HISTORY_PAGE_SIZE)
+  const [progressSessionId, setProgressSessionId] = useState<string | null>(null)
+  const progressSession = sessions.find((session) => session.id === progressSessionId) ?? null
 
   useEffect(() => {
     hydrateTimer()
@@ -369,6 +374,11 @@ export default function PomodoroPage() {
           <History className="text-zinc-400" />
           Session history
         </h2>
+        {sessions.length > 0 && (
+          <p className="-mt-3 mb-4 text-sm text-zinc-500">
+            Click a session to note what you got done and how far along its task is.
+          </p>
+        )}
 
         {sessions.length === 0 ? (
           <p className="py-8 text-center italic text-zinc-500">No sessions logged yet. Time to focus!</p>
@@ -378,31 +388,60 @@ export default function PomodoroPage() {
               {visibleSessions.map((session) => {
                 const project = projects.find((item) => item.id === session.project_id)
                 const task = tasks.find((item) => item.id === session.task_id)
+                const hasProgress = Boolean(session.progress_note) || session.progress_percent != null
                 return (
-                  <article key={session.id} className="flex flex-col gap-3 rounded-xl border border-[var(--surface-border)] bg-[var(--surface)] p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--color-primary)]/10 text-[var(--color-primary)]">
-                        <BrainCircuit size={20} />
+                  <button
+                    type="button"
+                    key={session.id}
+                    onClick={() => {
+                      clearError()
+                      setProgressSessionId(session.id)
+                    }}
+                    aria-label={`${hasProgress ? "Edit" : "Add"} progress for the ${session.duration}-minute session on ${format(new Date(session.start_time), "MMM d, h:mm a")}`}
+                    className="group block w-full rounded-xl border border-[var(--surface-border)] bg-[var(--surface)] p-4 text-left transition-colors hover:border-[var(--color-primary)]/60"
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex min-w-0 items-center gap-4">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--color-primary)]/10 text-[var(--color-primary)]">
+                          <BrainCircuit size={20} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-white">
+                            {session.duration} min
+                            {session.planned_duration ? ` of ${session.planned_duration} min planned` : ""}
+                          </p>
+                          <p className="text-sm text-zinc-300">{task?.title ?? "Unassigned focus"}</p>
+                          <p className="text-xs text-zinc-500">
+                            {format(new Date(session.start_time), "MMM d, yyyy · h:mm a")} – {format(new Date(session.end_time), "h:mm a")}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-bold text-white">
-                          {session.duration} min
-                          {session.planned_duration ? ` of ${session.planned_duration} min planned` : ""}
-                        </p>
-                        <p className="text-sm text-zinc-300">{task?.title ?? "Unassigned focus"}</p>
-                        <p className="text-xs text-zinc-500">
-                          {format(new Date(session.start_time), "MMM d, yyyy · h:mm a")} – {format(new Date(session.end_time), "h:mm a")}
-                        </p>
+                      <div className="flex shrink-0 flex-wrap items-center gap-2">
+                        {session.progress_percent != null && (
+                          <span className="rounded-full bg-[var(--color-primary)]/15 px-2.5 py-1 text-xs font-bold text-[var(--color-primary)]">
+                            {session.progress_percent}% done
+                          </span>
+                        )}
+                        <span
+                          className="flex w-fit items-center gap-1 rounded-full border border-[var(--surface-border)] bg-zinc-900 px-3 py-1 text-xs font-semibold"
+                          style={{ color: project?.color ?? "#a1a1aa" }}
+                        >
+                          <FolderKanban size={12} />
+                          <span>{project?.name ?? "Misc."}</span>
+                        </span>
                       </div>
                     </div>
-                    <div
-                      className="flex w-fit items-center gap-1 rounded-full border border-[var(--surface-border)] bg-zinc-900 px-3 py-1 text-xs font-semibold"
-                      style={{ color: project?.color ?? "#a1a1aa" }}
-                    >
-                      <FolderKanban size={12} />
-                      <span>{project?.name ?? "Misc."}</span>
-                    </div>
-                  </article>
+                    {session.progress_note ? (
+                      <p className="mt-3 line-clamp-2 whitespace-pre-line border-t border-[var(--surface-border)] pt-3 text-sm text-zinc-300">
+                        {session.progress_note}
+                      </p>
+                    ) : (
+                      <p className="mt-3 flex items-center gap-1.5 text-xs text-zinc-500 group-hover:text-zinc-300">
+                        <NotebookPen size={13} aria-hidden="true" />
+                        {session.progress_percent != null ? "Add a note" : "Add progress"}
+                      </p>
+                    )}
+                  </button>
                 )
               })}
             </div>
@@ -420,6 +459,16 @@ export default function PomodoroPage() {
           </>
         )}
       </section>
+
+      {progressSession && (
+        <SessionProgressDialog
+          key={progressSession.id}
+          session={progressSession}
+          taskTitle={tasks.find((task) => task.id === progressSession.task_id)?.title ?? null}
+          previousPercent={progressBefore(sessions, progressSession)}
+          onClose={() => setProgressSessionId(null)}
+        />
+      )}
 
       {isManualEntryOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="manual-focus-title">

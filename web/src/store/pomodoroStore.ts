@@ -20,7 +20,13 @@ export interface PomodoroSession {
   // True for entries logged by hand rather than recorded by the timer. Manual
   // entries earn focus minutes but not the completed-session bonus (B-20).
   is_manual: boolean
+  // What the user wrote about the session, and their estimate of how far along
+  // the task is afterwards (0-100). Both optional; neither affects XP.
+  progress_note: string | null
+  progress_percent: number | null
 }
+
+export const PROGRESS_NOTE_MAX_LENGTH = 2000
 
 export interface ManualFocusSessionInput {
   taskId: string | null
@@ -65,6 +71,8 @@ interface PomodoroState {
   alarmRinging: boolean
   fetchSessions: () => Promise<void>
   addManualSession: (input: ManualFocusSessionInput) => Promise<boolean>
+  /** Saves a session's progress note and task-progress estimate (null clears it). */
+  updateSessionProgress: (sessionId: string, note: string, percent: number | null) => Promise<boolean>
   hydrateTimer: () => void
   updateSettings: (focus: number, short: number, long: number) => void
   setMode: (mode: PomodoroMode) => void
@@ -257,6 +265,38 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
         error: null,
       }))
       await useAuthStore.getState().refreshProfile()
+      return true
+    },
+
+    updateSessionProgress: async (sessionId, note, percent) => {
+      const trimmed = note.trim()
+      if (trimmed.length > PROGRESS_NOTE_MAX_LENGTH) {
+        set({ error: `Progress notes are limited to ${PROGRESS_NOTE_MAX_LENGTH} characters.` })
+        return false
+      }
+      if (percent !== null && (!Number.isInteger(percent) || percent < 0 || percent > 100)) {
+        set({ error: 'Progress must be a whole number from 0 to 100.' })
+        return false
+      }
+
+      // Requires supabase/milestone_2_session_progress.sql.
+      const { data, error } = await supabase
+        .from('pomodoro_sessions')
+        .update({ progress_note: trimmed || null, progress_percent: percent })
+        .eq('id', sessionId)
+        .select()
+        .single()
+
+      if (error || !data) {
+        set({ error: error?.message ?? 'Unable to save progress for this session.' })
+        return false
+      }
+
+      const updated = data as PomodoroSession
+      set((state) => ({
+        sessions: state.sessions.map((session) => (session.id === updated.id ? updated : session)),
+        error: null,
+      }))
       return true
     },
 

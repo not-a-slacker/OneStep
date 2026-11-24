@@ -33,6 +33,7 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog"
 import { useTaskStore, type Task } from "@/store/taskStore"
 import { useProjectStore, type Project } from "@/store/projectStore"
 import { usePomodoroStore } from "@/store/pomodoroStore"
+import { latestProgressByTask } from "@/lib/taskProgress"
 
 interface TaskFormState {
   title: string
@@ -92,6 +93,9 @@ export default function TasksPage() {
     })
     return result
   }, [sessions])
+
+  // Each task's most recent progress estimate, entered on the Pomodoro page.
+  const progressByTask = useMemo(() => latestProgressByTask(sessions), [sessions])
 
   const sortedTasks = useMemo(() => {
     const priorityWeight = { high: 3, medium: 2, low: 1 }
@@ -272,6 +276,7 @@ export default function TasksPage() {
           tasks={pendingTasks}
           projects={projects}
           actualMinutesByTask={actualMinutesByTask}
+          progressByTask={progressByTask}
           loading={loading}
           onEdit={openEditModal}
           onToggle={(task) => void updateTaskStatus(task.id, "completed")}
@@ -282,6 +287,7 @@ export default function TasksPage() {
           tasks={completedTasks}
           projects={projects}
           actualMinutesByTask={actualMinutesByTask}
+          progressByTask={progressByTask}
           loading={loading}
           completed
           onEdit={openEditModal}
@@ -396,6 +402,7 @@ interface TaskColumnProps {
   tasks: Task[]
   projects: Project[]
   actualMinutesByTask: Map<string, number>
+  progressByTask: Map<string, number>
   loading: boolean
   completed?: boolean
   onEdit: (task: Task) => void
@@ -403,7 +410,7 @@ interface TaskColumnProps {
   onDelete: (task: Task) => void
 }
 
-function TaskColumn({ title, tasks, projects, actualMinutesByTask, loading, completed, onEdit, onToggle, onDelete }: TaskColumnProps) {
+function TaskColumn({ title, tasks, projects, actualMinutesByTask, progressByTask, loading, completed, onEdit, onToggle, onDelete }: TaskColumnProps) {
   return (
     <div className="rounded-2xl border border-[var(--surface-border)] bg-[var(--surface)] p-5">
       <h2 className="mb-4 text-lg font-semibold text-zinc-200">{title}</h2>
@@ -414,6 +421,8 @@ function TaskColumn({ title, tasks, projects, actualMinutesByTask, loading, comp
           {tasks.map((task) => {
             const project = projects.find((item) => item.id === task.project_id)
             const overdue = Boolean(task.deadline && isPast(new Date(task.deadline)) && !isToday(new Date(task.deadline)) && !completed)
+            // A completed task is done whatever its last estimate said.
+            const progress = completed ? undefined : progressByTask.get(task.id)
             return (
               <article key={task.id} className={`rounded-xl border p-4 ${overdue ? "border-red-500/40 bg-red-500/5" : "border-[var(--surface-border)] bg-zinc-950/30"}`}>
                 <div className="flex items-start justify-between gap-3">
@@ -428,6 +437,24 @@ function TaskColumn({ title, tasks, projects, actualMinutesByTask, loading, comp
                       {task.deadline && <span className={`flex items-center gap-1 ${overdue ? "text-red-300" : ""}`}><Calendar size={12} />{format(new Date(task.deadline), "MMM d, h:mm a")}</span>}
                       <span className="flex items-center gap-1"><Clock size={12} />{task.estimated_time ?? 0}m planned / {actualMinutesByTask.get(task.id) ?? 0}m actual</span>
                     </div>
+                    {progress !== undefined && (
+                      <div className="mt-3">
+                        <div className="mb-1 flex justify-between text-xs text-zinc-400">
+                          <span>Progress</span>
+                          <span className="font-semibold text-zinc-200">{progress}%</span>
+                        </div>
+                        <div
+                          role="progressbar"
+                          aria-label={`${task.title} progress`}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={progress}
+                          className="h-2 overflow-hidden rounded-full bg-zinc-800"
+                        >
+                          <div className="h-full rounded-full bg-[var(--color-primary)] transition-[width]" style={{ width: `${progress}%` }} />
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div className="flex gap-1">
                     <button type="button" aria-label={`Edit ${task.title}`} onClick={() => onEdit(task)} className="rounded-lg p-2 text-zinc-500 hover:bg-zinc-800 hover:text-white"><Edit3 size={16} /></button>

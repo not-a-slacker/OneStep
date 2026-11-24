@@ -105,6 +105,7 @@ default project per user.
 | `milestone_1_verification.sql` | Any | Read-only PASS/FAIL report on the above |
 | `milestone_2_xp_fixes.sql` | Legacy DBs | Per-source XP split on profiles, `is_manual` focus entries without the session bonus; ends with its own PASS/FAIL check |
 | `milestone_2_streak_bonus.sql` | Legacy DBs | Streak bonus per milestone in every run (7 days daily, 4 weeks weekly); ends with its own PASS/INFO check |
+| `milestone_2_session_progress.sql` | Legacy DBs | Optional progress note and task-progress percentage on focus sessions; ends with its own PASS check |
 
 ---
 
@@ -159,9 +160,16 @@ Full CRUD in a modal (title, project, priority, deadline, estimated minutes,
 notes), open and completed columns, overdue styling, and four analytics tiles.
 Two charts: *estimated vs actual focus time* per task (actual is the sum of
 task-linked Pomodoro minutes) and *tasks created vs focus minutes* over 14 days.
+Open tasks show a **progress bar** with the most recent progress estimate
+entered against one of their focus sessions (see 4.6).
 
 ### 4.6 Pomodoro
 
+- Clicking a session in the history opens a **progress form**: a note on what
+  the session achieved (up to 2,000 characters) and, for task sessions, an
+  estimate of how far along the task is afterwards (0–100 %, starting from the
+  previous estimate). The history shows the note and percentage; the Tasks page
+  uses the latest estimate per task, by session start time. Neither affects XP.
 - Focus / short-break / long-break modes with a circular SVG progress ring.
 - **Target-timestamp countdown** rather than a decrementing counter, so a
   throttled tab does not lose time.

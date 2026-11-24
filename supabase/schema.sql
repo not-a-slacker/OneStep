@@ -1110,3 +1110,22 @@ BEGIN
   END LOOP;
 END;
 $$;
+
+
+-- ===========================================================================
+-- Milestone 2: progress notes on focus sessions
+-- Identical to supabase/milestone_2_session_progress.sql, inlined so that
+-- schema.sql alone still produces the current database. Existing databases
+-- should apply that file instead.
+-- ===========================================================================
+
+ALTER TABLE public.pomodoro_sessions
+  ADD COLUMN IF NOT EXISTS progress_note text
+    CHECK (progress_note IS NULL OR char_length(progress_note) <= 2000),
+  ADD COLUMN IF NOT EXISTS progress_percent smallint
+    CHECK (progress_percent IS NULL OR progress_percent BETWEEN 0 AND 100);
+
+-- Finding a task's latest estimate reads the newest session with a value.
+CREATE INDEX IF NOT EXISTS pomodoro_task_progress_idx
+  ON public.pomodoro_sessions (task_id, start_time DESC)
+  WHERE progress_percent IS NOT NULL;
