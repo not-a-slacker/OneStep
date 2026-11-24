@@ -12,18 +12,42 @@
 -- Milestones are derived from the check-in history rather than stored, like the
 -- rest of XP, so removing a check-in takes its bonus back.
 --
--- Apply in the Supabase SQL editor after milestone_2_xp_fixes.sql. No client
--- change depends on it. Idempotent: safe to run more than once.
+-- Also fixes B-23: a habit's current streak was only recalculated when a
+-- check-in changed, so it never dropped to 0 after you stopped. Every habit is
+-- refreshed here, and refresh_my_habit_streaks() lets the web app bring the
+-- signed-in user's streaks up to date each time it loads them.
+--
+-- Apply in the Supabase SQL editor after milestone_2_xp_fixes.sql. The web app
+-- calls refresh_my_habit_streaks() but carries on if it does not exist yet.
+-- Idempotent: safe to run more than once.
 
 BEGIN;
 
--- Snapshot for the checks at the end of this file.
+-- Snapshots for the checks at the end of this file.
 DROP TABLE IF EXISTS pg_temp.b21_before;
 CREATE TEMP TABLE b21_before AS
 SELECT h.id AS habit_id, h.current_streak, h.longest_streak,
        p.id AS profile_id, p.experience_points
 FROM public.profiles p
 LEFT JOIN public.habits h ON h.user_id = p.id;
+
+-- B-23. Stored streaks were only recalculated when a check-in was added or
+-- removed, so current_streak never fell back to 0 when you stopped. Refresh
+-- every habit with the existing rules first, so the guard further down compares
+-- like with like: what the old rules say today against what the new code says.
+DO $$
+DECLARE
+  v_row record;
+BEGIN
+  FOR v_row IN SELECT id FROM public.habits LOOP
+    PERFORM public.recalculate_habit_streaks(v_row.id);
+  END LOOP;
+END;
+$$;
+
+DROP TABLE IF EXISTS pg_temp.b21_refreshed;
+CREATE TEMP TABLE b21_refreshed AS
+SELECT id AS habit_id, current_streak, longest_streak FROM public.habits;
 
 -- ---------------------------------------------------------------------------
 -- Every streak run of one habit: its length (days for daily habits, successful
@@ -138,6 +162,27 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 REVOKE ALL ON FUNCTION public.recalculate_habit_streaks(uuid) FROM PUBLIC;
 
+-- B-23. Lets the web app bring the signed-in user's streaks up to date before
+-- it reads them, so a habit you stopped doing shows a current streak of 0.
+-- Only touches the caller's own habits, and only writes rows that changed.
+CREATE OR REPLACE FUNCTION public.refresh_my_habit_streaks()
+RETURNS void AS $$
+DECLARE
+  v_row record;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RETURN;
+  END IF;
+  FOR v_row IN SELECT id FROM public.habits WHERE user_id = auth.uid() LOOP
+    PERFORM public.recalculate_habit_streaks(v_row.id);
+  END LOOP;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+REVOKE ALL ON FUNCTION public.refresh_my_habit_streaks() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.refresh_my_habit_streaks() FROM anon;
+GRANT EXECUTE ON FUNCTION public.refresh_my_habit_streaks() TO authenticated;
+
 CREATE OR REPLACE FUNCTION public.recalculate_user_gamification(target_user_id uuid)
 RETURNS void AS $$
 DECLARE
@@ -229,14 +274,14 @@ BEGIN
 END;
 $$;
 
--- The streak rules only moved, so no stored streak may change. Abort (and roll
--- everything back) if one did.
+-- The streak rules only moved, so the new code must agree with the old rules
+-- applied today. Abort (and roll everything back) if any habit differs.
 DO $$
 DECLARE
   v_changed integer;
 BEGIN
   SELECT COUNT(*) INTO v_changed
-  FROM b21_before b
+  FROM b21_refreshed b
   JOIN public.habits h ON h.id = b.habit_id
   WHERE h.current_streak IS DISTINCT FROM b.current_streak
      OR h.longest_streak IS DISTINCT FROM b.longest_streak;
@@ -266,4 +311,14 @@ SELECT 'XP gained from the new streak bonus (information only)',
        'INFO: ' || COALESCE(SUM(p.experience_points - b.experience_points), 0) || ' XP across '
          || COUNT(*) FILTER (WHERE p.experience_points <> b.experience_points) || ' profiles'
 FROM public.profiles p
-JOIN (SELECT DISTINCT profile_id, experience_points FROM b21_before) b ON b.profile_id = p.id;
+JOIN (SELECT DISTINCT profile_id, experience_points FROM b21_before) b ON b.profile_id = p.id
+UNION ALL
+SELECT 'Out-of-date current streaks corrected (information only)',
+       'INFO: ' || COUNT(*) || ' habits'
+FROM b21_before b
+JOIN public.habits h ON h.id = b.habit_id
+WHERE h.current_streak IS DISTINCT FROM b.current_streak
+UNION ALL
+SELECT 'Signed-in users can refresh their own streaks',
+       CASE WHEN has_function_privilege('authenticated', 'public.refresh_my_habit_streaks()', 'EXECUTE')
+            THEN 'PASS' ELSE 'FAIL' END;

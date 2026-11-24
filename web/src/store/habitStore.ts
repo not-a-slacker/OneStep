@@ -52,6 +52,12 @@ export const useHabitStore = create<HabitState>((set, get) => ({
       return
     }
 
+    // Stored streaks only change when a check-in does, so a habit you stopped
+    // would keep showing its old current streak. Bring them up to date first
+    // (ROADMAP B-23). Best effort: before supabase/milestone_2_streak_bonus.sql
+    // is applied the function does not exist, and the stored values are shown.
+    await supabase.rpc('refresh_my_habit_streaks').then(() => undefined, () => undefined)
+
     const [habitResult, logResult] = await Promise.all([
       supabase
         .from('habits')

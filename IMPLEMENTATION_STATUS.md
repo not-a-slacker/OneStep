@@ -104,7 +104,7 @@ default project per user.
 | `milestone_1_integrity.sql` | Legacy DBs | Server-owned habit streaks, habit-log ownership, default-project protection, focus-session limits |
 | `milestone_1_verification.sql` | Any | Read-only PASS/FAIL report on the above |
 | `milestone_2_xp_fixes.sql` | Legacy DBs | Per-source XP split on profiles, `is_manual` focus entries without the session bonus; ends with its own PASS/FAIL check |
-| `milestone_2_streak_bonus.sql` | Legacy DBs | Streak bonus per milestone in every run (7 days daily, 4 weeks weekly); ends with its own PASS/INFO check |
+| `milestone_2_streak_bonus.sql` | Legacy DBs | Streak bonus per milestone in every run (7 days daily, 4 weeks weekly); current streaks refreshed on read (B-23); ends with its own PASS/INFO check |
 | `milestone_2_session_progress.sql` | Legacy DBs | Optional progress note and task-progress percentage on focus sessions; ends with its own PASS check |
 
 ---

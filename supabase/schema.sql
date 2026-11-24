@@ -901,7 +901,7 @@ $$;
 
 
 -- ===========================================================================
--- Milestone 2: streak bonus per milestone, in every run (ROADMAP B-21)
+-- Milestone 2: streak bonus per milestone, in every run (ROADMAP B-21, B-23)
 -- Identical to supabase/milestone_2_streak_bonus.sql apart from its upgrade-only
 -- checks, inlined so that schema.sql alone still produces the current database.
 -- Existing databases should apply that file instead.
@@ -1019,6 +1019,27 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 REVOKE ALL ON FUNCTION public.recalculate_habit_streaks(uuid) FROM PUBLIC;
+
+-- B-23. Lets the web app bring the signed-in user's streaks up to date before
+-- it reads them, so a habit you stopped doing shows a current streak of 0.
+-- Only touches the caller's own habits, and only writes rows that changed.
+CREATE OR REPLACE FUNCTION public.refresh_my_habit_streaks()
+RETURNS void AS $$
+DECLARE
+  v_row record;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RETURN;
+  END IF;
+  FOR v_row IN SELECT id FROM public.habits WHERE user_id = auth.uid() LOOP
+    PERFORM public.recalculate_habit_streaks(v_row.id);
+  END LOOP;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+REVOKE ALL ON FUNCTION public.refresh_my_habit_streaks() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.refresh_my_habit_streaks() FROM anon;
+GRANT EXECUTE ON FUNCTION public.refresh_my_habit_streaks() TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.recalculate_user_gamification(target_user_id uuid)
 RETURNS void AS $$

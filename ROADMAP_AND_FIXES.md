@@ -52,6 +52,7 @@ productivity tool with no leaderboard or shared ranking.
 | S-10 manual focus time is effectively unlimited | Accepted (personal use) | — |
 | S-11 task and habit XP can be farmed | Accepted (personal use) | — |
 | B-21 streak bonus is inconsistent | Done | `supabase/milestone_2_streak_bonus.sql` |
+| B-23 current streak never resets | Done | `supabase/milestone_2_streak_bonus.sql`, `habitStore.ts` |
 
 **Apply `milestone_2_xp_fixes.sql` before deploying the matching web build.** The
 build writes `pomodoro_sessions.is_manual` and reads `profiles.task_xp`,
@@ -481,6 +482,21 @@ pays again as it is rebuilt, so `current_streak` needs no separate value.
 Four weeks rather than one keeps it a streak bonus: paying every successful week
 would be a flat weekly payment. A side effect is that `habits.longest_streak`,
 which a client can still set when inserting a habit, no longer affects XP.
+
+### B-23 · A habit's current streak never falls back to 0 — **P1** · DONE
+
+`recalculate_habit_streaks` ran only when a check-in was added or removed, or the
+habit's frequency changed. `current_streak` depends on today's date, so after
+you stopped doing a habit the stored value — and the "N Streak" badge on the
+Habits page and dashboard — stayed at whatever it was on the last check-in.
+Found when the first version of `milestone_2_streak_bonus.sql` aborted: its
+guard recalculated every habit and saw six stale streaks change.
+
+**Done:** the migration now refreshes every habit with the existing rules before
+comparing, and adds `refresh_my_habit_streaks()`, which the web app calls before
+loading habits so the signed-in user's streaks are current whenever they are
+shown. It only writes rows whose values changed. XP was never affected: the
+bonus does not use `current_streak`.
 
 ### B-22 · Editing a task moves its deadline by the UTC offset — **P1** · DONE
 
