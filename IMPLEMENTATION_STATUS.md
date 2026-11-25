@@ -161,7 +161,12 @@ notes), open and completed columns, overdue styling, and four analytics tiles.
 Two charts: *estimated vs actual focus time* per task (actual is the sum of
 task-linked Pomodoro minutes) and *tasks created vs focus minutes* over 14 days.
 Open tasks show a **progress bar** with the most recent progress estimate
-entered against one of their focus sessions (see 4.6).
+entered against one of their focus sessions (see 4.6). Clicking a task opens a
+**progress dialog**: progress %, time spent, estimate and session count; a line
+chart of each estimate against the cumulative focus minutes at that point (from
+0 % at 0 minutes, ending at 100 % if completed), with a dashed *planned pace*
+line to 100 % at the estimate when one is set; and the session notes, newest
+first, which double as the chart's data table.
 
 ### 4.6 Pomodoro
 

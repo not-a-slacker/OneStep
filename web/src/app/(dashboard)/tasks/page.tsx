@@ -30,6 +30,7 @@ import {
 } from "recharts"
 import { eachDayOfInterval, format, isPast, isToday, subDays } from "date-fns"
 import ConfirmDialog from "@/components/ui/ConfirmDialog"
+import TaskProgressDialog from "@/components/tasks/TaskProgressDialog"
 import { useTaskStore, type Task } from "@/store/taskStore"
 import { useProjectStore, type Project } from "@/store/projectStore"
 import { usePomodoroStore } from "@/store/pomodoroStore"
@@ -73,6 +74,8 @@ export default function TasksPage() {
   const [saving, setSaving] = useState(false)
   const [taskPendingDeletion, setTaskPendingDeletion] = useState<Task | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [progressTaskId, setProgressTaskId] = useState<string | null>(null)
+  const progressTask = tasks.find((task) => task.id === progressTaskId) ?? null
 
   useEffect(() => {
     void Promise.all([fetchTasks(), fetchProjects(), fetchSessions()])
@@ -274,6 +277,7 @@ export default function TasksPage() {
         <TaskColumn
           title={`Open · ${pendingTasks.length}`}
           tasks={pendingTasks}
+          onOpen={(task) => setProgressTaskId(task.id)}
           projects={projects}
           actualMinutesByTask={actualMinutesByTask}
           progressByTask={progressByTask}
@@ -285,6 +289,7 @@ export default function TasksPage() {
         <TaskColumn
           title={`Completed · ${completedTasks.length}`}
           tasks={completedTasks}
+          onOpen={(task) => setProgressTaskId(task.id)}
           projects={projects}
           actualMinutesByTask={actualMinutesByTask}
           progressByTask={progressByTask}
@@ -295,6 +300,15 @@ export default function TasksPage() {
           onDelete={(task) => setTaskPendingDeletion(task)}
         />
       </section>
+
+      {progressTask && (
+        <TaskProgressDialog
+          task={progressTask}
+          project={projects.find((project) => project.id === progressTask.project_id)}
+          sessions={sessions}
+          onClose={() => setProgressTaskId(null)}
+        />
+      )}
 
       <ConfirmDialog
         open={Boolean(taskPendingDeletion)}
@@ -408,9 +422,10 @@ interface TaskColumnProps {
   onEdit: (task: Task) => void
   onToggle: (task: Task) => void
   onDelete: (task: Task) => void
+  onOpen: (task: Task) => void
 }
 
-function TaskColumn({ title, tasks, projects, actualMinutesByTask, progressByTask, loading, completed, onEdit, onToggle, onDelete }: TaskColumnProps) {
+function TaskColumn({ title, tasks, projects, actualMinutesByTask, progressByTask, loading, completed, onEdit, onToggle, onDelete, onOpen }: TaskColumnProps) {
   return (
     <div className="rounded-2xl border border-[var(--surface-border)] bg-[var(--surface)] p-5">
       <h2 className="mb-4 text-lg font-semibold text-zinc-200">{title}</h2>
@@ -424,13 +439,23 @@ function TaskColumn({ title, tasks, projects, actualMinutesByTask, progressByTas
             // A completed task is done whatever its last estimate said.
             const progress = completed ? undefined : progressByTask.get(task.id)
             return (
-              <article key={task.id} className={`rounded-xl border p-4 ${overdue ? "border-red-500/40 bg-red-500/5" : "border-[var(--surface-border)] bg-zinc-950/30"}`}>
+              <article key={task.id} className={`relative rounded-xl border p-4 transition-colors hover:border-[var(--color-primary)]/60 ${overdue ? "border-red-500/40 bg-red-500/5" : "border-[var(--surface-border)] bg-zinc-950/30"}`}>
                 <div className="flex items-start justify-between gap-3">
-                  <button type="button" aria-label={completed ? "Reopen task" : "Complete task"} onClick={() => onToggle(task)} className="mt-0.5 text-zinc-500 hover:text-emerald-400">
+                  <button type="button" aria-label={completed ? "Reopen task" : "Complete task"} onClick={() => onToggle(task)} className="relative z-10 mt-0.5 text-zinc-500 hover:text-emerald-400">
                     {completed ? <CheckCircle2 size={21} className="text-emerald-400" /> : <Circle size={21} />}
                   </button>
                   <div className="min-w-0 flex-1">
-                    <h3 className={`font-semibold ${completed ? "text-zinc-500 line-through" : "text-white"}`}>{task.title}</h3>
+                    <h3 className={`font-semibold ${completed ? "text-zinc-500 line-through" : "text-white"}`}>
+                      {/* Stretched over the whole card; the other buttons sit above it. */}
+                      <button
+                        type="button"
+                        onClick={() => onOpen(task)}
+                        aria-label={`Show progress for ${task.title}`}
+                        className="text-left after:absolute after:inset-0 after:rounded-xl after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-[var(--color-primary)]"
+                      >
+                        {task.title}
+                      </button>
+                    </h3>
                     <div className="mt-2 flex flex-wrap gap-2 text-xs text-zinc-400">
                       <span className="flex items-center gap-1"><FolderKanban size={12} style={{ color: project?.color }} />{project?.name ?? "Misc."}</span>
                       <span className="flex items-center gap-1"><Flag size={12} />{task.priority}</span>
@@ -456,7 +481,7 @@ function TaskColumn({ title, tasks, projects, actualMinutesByTask, progressByTas
                       </div>
                     )}
                   </div>
-                  <div className="flex gap-1">
+                  <div className="relative z-10 flex gap-1">
                     <button type="button" aria-label={`Edit ${task.title}`} onClick={() => onEdit(task)} className="rounded-lg p-2 text-zinc-500 hover:bg-zinc-800 hover:text-white"><Edit3 size={16} /></button>
                     <button type="button" aria-label={`Delete ${task.title}`} onClick={() => onDelete(task)} className="rounded-lg p-2 text-zinc-500 hover:bg-red-500/10 hover:text-red-300"><Trash2 size={16} /></button>
                   </div>
