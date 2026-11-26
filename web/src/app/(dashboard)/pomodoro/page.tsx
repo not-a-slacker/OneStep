@@ -25,8 +25,7 @@ import {
   subscribeNotificationPermission,
   unlockAlarm,
 } from "@/lib/alarm"
-import SessionProgressDialog from "@/components/timer/SessionProgressDialog"
-import { progressBefore } from "@/lib/taskProgress"
+import SessionDialog from "@/components/timer/SessionDialog"
 import { usePomodoroStore } from "@/store/pomodoroStore"
 import { useProjectStore } from "@/store/projectStore"
 import { useTaskStore } from "@/store/taskStore"
@@ -376,7 +375,7 @@ export default function PomodoroPage() {
         </h2>
         {sessions.length > 0 && (
           <p className="-mt-3 mb-4 text-sm text-zinc-500">
-            Click a session to note what you got done and how far along its task is.
+            Click a session to edit or delete it, or to note what you got done and how far along its task is.
           </p>
         )}
 
@@ -388,7 +387,6 @@ export default function PomodoroPage() {
               {visibleSessions.map((session) => {
                 const project = projects.find((item) => item.id === session.project_id)
                 const task = tasks.find((item) => item.id === session.task_id)
-                const hasProgress = Boolean(session.progress_note) || session.progress_percent != null
                 return (
                   <button
                     type="button"
@@ -397,7 +395,7 @@ export default function PomodoroPage() {
                       clearError()
                       setProgressSessionId(session.id)
                     }}
-                    aria-label={`${hasProgress ? "Edit" : "Add"} progress for the ${session.duration}-minute session on ${format(new Date(session.start_time), "MMM d, h:mm a")}`}
+                    aria-label={`Open the ${session.duration}-minute session on ${format(new Date(session.start_time), "MMM d, h:mm a")}`}
                     className="group block w-full rounded-xl border border-[var(--surface-border)] bg-[var(--surface)] p-4 text-left transition-colors hover:border-[var(--color-primary)]/60"
                   >
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -461,11 +459,12 @@ export default function PomodoroPage() {
       </section>
 
       {progressSession && (
-        <SessionProgressDialog
+        <SessionDialog
           key={progressSession.id}
           session={progressSession}
-          taskTitle={tasks.find((task) => task.id === progressSession.task_id)?.title ?? null}
-          previousPercent={progressBefore(sessions, progressSession)}
+          sessions={sessions}
+          tasks={tasks}
+          projects={projects}
           onClose={() => setProgressSessionId(null)}
         />
       )}

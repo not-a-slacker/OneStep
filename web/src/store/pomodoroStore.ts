@@ -28,6 +28,16 @@ export interface PomodoroSession {
 
 export const PROGRESS_NOTE_MAX_LENGTH = 2000
 
+export interface SessionEditInput {
+  taskId: string | null
+  projectId: string | null
+  /** datetime-local value, e.g. 2026-11-26T09:30 */
+  startedAt: string
+  durationMinutes: number
+  note: string
+  percent: number | null
+}
+
 export interface ManualFocusSessionInput {
   taskId: string | null
   projectId: string | null
@@ -71,8 +81,14 @@ interface PomodoroState {
   alarmRinging: boolean
   fetchSessions: () => Promise<void>
   addManualSession: (input: ManualFocusSessionInput) => Promise<boolean>
-  /** Saves a session's progress note and task-progress estimate (null clears it). */
-  updateSessionProgress: (sessionId: string, note: string, percent: number | null) => Promise<boolean>
+  /**
+   * Edits a past session: its task or project, start time, length, progress
+   * note and task-progress estimate (null clears it). The session the timer is
+   * still writing to only accepts note and estimate changes.
+   */
+  updateSession: (sessionId: string, input: SessionEditInput) => Promise<boolean>
+  /** Permanently deletes a session that the timer is not using. */
+  deleteSession: (sessionId: string) => Promise<boolean>
   hydrateTimer: () => void
   updateSettings: (focus: number, short: number, long: number) => void
   setMode: (mode: PomodoroMode) => void
@@ -97,6 +113,26 @@ const TIMER_STORAGE_KEY = 'onestep-pomodoro-timer-v2'
  */
 let stopTicker: (() => void) | null = null
 let completionInProgress = false
+
+/** Timer sessions run to their planned length; drives the long-break cadence. */
+function countCompletedSessions(sessions: PomodoroSession[]): number {
+  return sessions.filter((session) => (
+    !session.is_manual
+    && session.planned_duration > 0
+    && session.duration >= session.planned_duration
+  )).length
+}
+
+function sortByStartDesc(sessions: PomodoroSession[]): PomodoroSession[] {
+  return [...sessions].sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime())
+}
+
+/** A timestamp as a datetime-local value, the form the edit dialog uses. */
+function toLocalMinute(iso: string): string {
+  const date = new Date(iso)
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
 
 function persistTimer(state: PomodoroState) {
   if (typeof window === 'undefined') return
@@ -190,11 +226,7 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
       const sessions = error ? get().sessions : data as PomodoroSession[]
       set({
         sessions,
-        sessionsCompleted: sessions.filter((session) => (
-          !session.is_manual
-          && session.planned_duration > 0
-          && session.duration >= session.planned_duration
-        )).length,
+        sessionsCompleted: countCompletedSessions(sessions),
         loading: false,
         error: error?.message ?? null,
       })
@@ -268,35 +300,116 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
       return true
     },
 
-    updateSessionProgress: async (sessionId, note, percent) => {
-      const trimmed = note.trim()
-      if (trimmed.length > PROGRESS_NOTE_MAX_LENGTH) {
+    updateSession: async (sessionId, input) => {
+      const original = get().sessions.find((session) => session.id === sessionId)
+      if (!original) {
+        set({ error: 'That session no longer exists. Refresh the page and try again.' })
+        return false
+      }
+
+      const note = input.note.trim()
+      if (note.length > PROGRESS_NOTE_MAX_LENGTH) {
         set({ error: `Progress notes are limited to ${PROGRESS_NOTE_MAX_LENGTH} characters.` })
         return false
       }
+      const percent = input.taskId ? input.percent : null
       if (percent !== null && (!Number.isInteger(percent) || percent < 0 || percent > 100)) {
         set({ error: 'Progress must be a whole number from 0 to 100.' })
         return false
       }
 
       // Requires supabase/milestone_2_session_progress.sql.
+      const patch: Record<string, unknown> = { progress_note: note || null, progress_percent: percent }
+
+      // The timer still writes duration and end time to its current session,
+      // so only the note and estimate may change until it finishes or resets.
+      if (sessionId !== get().currentSessionDbId) {
+        const task = input.taskId
+          ? useTaskStore.getState().tasks.find((item) => item.id === input.taskId)
+          : null
+        const project = task
+          ? useProjectStore.getState().projects.find((item) => item.id === task.project_id)
+          : useProjectStore.getState().projects.find((item) => item.id === input.projectId)
+        if ((input.taskId && !task) || !project) {
+          set({ error: 'Select a valid task or project for this session.' })
+          return false
+        }
+
+        const duration = Math.round(input.durationMinutes)
+        const start = new Date(input.startedAt)
+        if (!Number.isFinite(duration) || duration < 0 || Number.isNaN(start.getTime())) {
+          set({ error: 'Enter a valid start time and focus duration.' })
+          return false
+        }
+        // Same limits as the database (supabase/milestone_1_integrity.sql, S-2).
+        if (duration > 1440) {
+          set({ error: 'A single focus session cannot be longer than 24 hours (1440 minutes).' })
+          return false
+        }
+        if (start.getTime() > Date.now() + 60_000) {
+          set({ error: 'A focus session cannot start in the future.' })
+          return false
+        }
+
+        if ((task?.id ?? null) !== original.task_id || project.id !== original.project_id) {
+          patch.task_id = task?.id ?? null
+          patch.project_id = project.id
+        }
+
+        // The form works to the minute. Leave the stored timestamps alone unless
+        // the start or the length actually changed, so opening and saving a
+        // timer session does not round its times.
+        const startChanged = input.startedAt !== toLocalMinute(original.start_time)
+        if (startChanged || duration !== original.duration) {
+          const startTime = startChanged ? start : new Date(original.start_time)
+          patch.start_time = startTime.toISOString()
+          patch.end_time = new Date(startTime.getTime() + duration * 60_000).toISOString()
+          patch.duration = duration
+          // A manual entry's plan is its own length (it never earns the
+          // completed-session bonus); a timer session keeps the length it was
+          // started with, so shortening it removes the bonus.
+          if (original.is_manual) patch.planned_duration = Math.max(1, duration)
+        }
+      }
+
       const { data, error } = await supabase
         .from('pomodoro_sessions')
-        .update({ progress_note: trimmed || null, progress_percent: percent })
+        .update(patch)
         .eq('id', sessionId)
         .select()
         .single()
 
       if (error || !data) {
-        set({ error: error?.message ?? 'Unable to save progress for this session.' })
+        set({ error: error?.message ?? 'Unable to save this session.' })
         return false
       }
 
       const updated = data as PomodoroSession
-      set((state) => ({
-        sessions: state.sessions.map((session) => (session.id === updated.id ? updated : session)),
-        error: null,
-      }))
+      const sessions = sortByStartDesc(get().sessions.map((session) => (session.id === updated.id ? updated : session)))
+      set({ sessions, sessionsCompleted: countCompletedSessions(sessions), error: null })
+      await useAuthStore.getState().refreshProfile()
+      return true
+    },
+
+    deleteSession: async (sessionId) => {
+      if (sessionId === get().currentSessionDbId) {
+        set({ error: 'This session is still on the timer. Reset the timer before deleting it.' })
+        return false
+      }
+
+      const { error } = await supabase
+        .from('pomodoro_sessions')
+        .delete()
+        .eq('id', sessionId)
+
+      if (error) {
+        set({ error: error.message })
+        return false
+      }
+
+      const sessions = get().sessions.filter((session) => session.id !== sessionId)
+      set({ sessions, sessionsCompleted: countCompletedSessions(sessions), error: null })
+      await useAuthStore.getState().refreshProfile()
       return true
     },
 

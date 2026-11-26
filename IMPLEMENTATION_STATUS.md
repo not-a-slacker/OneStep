@@ -170,11 +170,16 @@ first, which double as the chart's data table.
 
 ### 4.6 Pomodoro
 
-- Clicking a session in the history opens a **progress form**: a note on what
-  the session achieved (up to 2,000 characters) and, for task sessions, an
-  estimate of how far along the task is afterwards (0–100 %, starting from the
-  previous estimate). The history shows the note and percentage; the Tasks page
-  uses the latest estimate per task, by session start time. Neither affects XP.
+- Clicking a session in the history opens a **session dialog** to edit or delete
+  it: its task (or project only), start time and focus minutes (the end time
+  follows; a timer session keeps its planned length, so shortening it below
+  that removes the +10 bonus), a note on what it achieved (up to 2,000
+  characters) and, for task sessions, an estimate of how far along the task is
+  afterwards (0–100 %, starting from the previous estimate). Deleting asks for
+  confirmation; XP is recalculated by the database either way. The session the
+  timer is still writing to (running or paused) only accepts a note until it
+  finishes or is reset. The history shows the note and percentage; the Tasks
+  page uses the latest estimate per task, by session start time.
 - Focus / short-break / long-break modes with a circular SVG progress ring.
 - **Target-timestamp countdown** rather than a decrementing counter, so a
   throttled tab does not lose time.
